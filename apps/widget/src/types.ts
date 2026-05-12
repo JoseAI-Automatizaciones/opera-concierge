@@ -9,6 +9,8 @@ export type PublicWidgetConfig = {
   primary_color: string;
   position: "bottom-right" | "bottom-left" | "top-right" | "top-left";
   voice: string;
+  /** Wall-clock cap on a single session in seconds. The widget enforces this client-side. */
+  max_session_seconds: number;
 };
 
 /**

@@ -18,6 +18,9 @@ const formSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex color like #B08A3E"),
   position: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]),
   voice: z.string().min(1),
+  max_sessions_per_minute: z.coerce.number().int().min(1).max(1000),
+  max_sessions_per_day: z.coerce.number().int().min(1).max(100000),
+  max_session_seconds: z.coerce.number().int().min(30).max(7200),
 });
 
 export type CreateWidgetState = {
@@ -37,6 +40,9 @@ export async function createWidget(
     primary_color: formData.get("primary_color") ?? "#B08A3E",
     position: formData.get("position") ?? "bottom-right",
     voice: formData.get("voice") ?? "verse",
+    max_sessions_per_minute: formData.get("max_sessions_per_minute") ?? 5,
+    max_sessions_per_day: formData.get("max_sessions_per_day") ?? 15,
+    max_session_seconds: formData.get("max_session_seconds") ?? 480,
   });
 
   if (!parsed.success) {
@@ -65,6 +71,9 @@ export async function createWidget(
     position: parsed.data.position,
     voice: parsed.data.voice,
     allowed_origins: origins,
+    max_sessions_per_minute: parsed.data.max_sessions_per_minute,
+    max_sessions_per_day: parsed.data.max_sessions_per_day,
+    max_session_seconds: parsed.data.max_session_seconds,
   });
 
   if (error) {

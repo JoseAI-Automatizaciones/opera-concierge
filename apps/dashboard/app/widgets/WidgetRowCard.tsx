@@ -77,6 +77,14 @@ export function WidgetRowCard({
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-3 text-[10px] uppercase tracking-[0.14em] text-opera-muted">
+        <span>{widget.max_sessions_per_minute}/min</span>
+        <span>·</span>
+        <span>{widget.max_sessions_per_day}/day</span>
+        <span>·</span>
+        <span>{Math.round(widget.max_session_seconds / 60)} min cap</span>
+      </div>
+
       <footer className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
         <p className="text-xs text-opera-muted">
           {widget.allowed_origins.length === 0

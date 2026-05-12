@@ -4,7 +4,11 @@ import type {
   TranscriptEntry,
   WidgetStatus,
 } from "./types";
-import { fetchWidgetConfig, mintRealtimeSession } from "./lib/api";
+import {
+  fetchWidgetConfig,
+  mintRealtimeSession,
+  RateLimitedError,
+} from "./lib/api";
 import {
   connectRealtime,
   MicrophoneDeniedError,
@@ -32,6 +36,14 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
 
   const handleRef = useRef<RealtimeHandle | null>(null);
   const aliveRef = useRef(true);
+  const sessionTimerRef = useRef<number | null>(null);
+
+  const clearSessionTimer = () => {
+    if (sessionTimerRef.current !== null) {
+      window.clearTimeout(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+  };
 
   // Load public config. Failure leaves the widget invisible.
   useEffect(() => {
@@ -63,6 +75,7 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
   useEffect(() => {
     return () => {
       aliveRef.current = false;
+      clearSessionTimer();
       handleRef.current?.stop();
       handleRef.current = null;
     };
@@ -113,9 +126,22 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
         return;
       }
       handleRef.current = handle;
+
+      // Wall-clock session cap: auto-stop at max_session_seconds. Server-side
+      // quota check protects the bill; this protects the OpenAI-side runtime
+      // bill for sessions a user leaves open accidentally.
+      clearSessionTimer();
+      if (config?.max_session_seconds && config.max_session_seconds > 0) {
+        sessionTimerRef.current = window.setTimeout(() => {
+          if (!aliveRef.current) return;
+          handleRef.current?.stop();
+          handleRef.current = null;
+          setError("Session time limit reached.");
+        }, config.max_session_seconds * 1000);
+      }
     } catch (err) {
       if (!aliveRef.current) return;
-      if (err instanceof MicrophoneDeniedError) {
+      if (err instanceof MicrophoneDeniedError || err instanceof RateLimitedError) {
         setError(err.message);
       } else {
         setError((err as Error).message);
@@ -125,6 +151,7 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
   };
 
   const stop = () => {
+    clearSessionTimer();
     handleRef.current?.stop();
     handleRef.current = null;
   };

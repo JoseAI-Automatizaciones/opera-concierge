@@ -82,9 +82,10 @@ Every subfolder has its **own `CLAUDE.md`** with local context. Always read it b
 Before flipping the repo to public OR deploying anywhere reachable from the internet:
 
 1. ✅ **Auth on `/api/widgets*`, `/widgets`, Server Actions.** Done — Supabase Auth magic link + `ALLOWED_EMAILS` allowlist. Middleware refreshes session, every protected page/API re-checks allowlist. `/auth/signout` has same-origin check.
-2. **Treat Realtime ephemeral tokens as untrusted on the client side.** OpenAI's `client_secrets` endpoint sets session defaults but clients CAN override `instructions`, `model`, `voice` during WebRTC handshake. Do not rely on mint-time config as a policy boundary — anything the operator wants enforced must be enforced via tool-execution guardrails server-side.
-3. **Add rate limiting** to `/api/realtime/session` and `/api/widget/config` per `widget_id` and per IP. Realtime tokens cost money to mint.
-4. **Set `ALLOWED_EMAILS`** in the deploy environment. Empty/undefined fails closed (no one can sign in), but it's worth verifying after deploy.
+2. ✅ **Rate limiting on `/api/realtime/session`** (Layer 1). Done — per-widget configurable caps (sessions/minute, sessions/day, max session seconds) enforced atomically via `consume_quota` Postgres function. Bucket is `ip:<addr>` for v1; Layer 2 will switch to operator-asserted user identity when present.
+3. **Treat Realtime ephemeral tokens as untrusted on the client side.** OpenAI's `client_secrets` endpoint sets session defaults but clients CAN override `instructions`, `model`, `voice` during WebRTC handshake. Do not rely on mint-time config as a policy boundary — anything the operator wants enforced must be enforced via tool-execution guardrails server-side.
+4. **Set `ALLOWED_EMAILS`** in the deploy environment. Empty/undefined fails closed (no one can sign in), but worth verifying after deploy.
+5. **(Future)** Rate limiting on `/api/widget/config` (read-only, lower impact but worth adding). Layer 2 (operator-asserted visitor identity). Layer 3 (per-tool-call quotas).
 
 These are tracked here intentionally; do not lose them.
 

@@ -19,6 +19,15 @@ export async function fetchWidgetConfig(
   return (await res.json()) as PublicWidgetConfig;
 }
 
+export class RateLimitedError extends Error {
+  constructor() {
+    super(
+      "You've used Opera Concierge a lot recently. Please wait a moment and try again."
+    );
+    this.name = "RateLimitedError";
+  }
+}
+
 export async function mintRealtimeSession(
   apiOrigin: string,
   widgetId: string
@@ -30,6 +39,9 @@ export async function mintRealtimeSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ widget_id: widgetId }),
   });
+  if (res.status === 429) {
+    throw new RateLimitedError();
+  }
   if (!res.ok) {
     throw new Error(
       `Opera Concierge: failed to mint realtime session (${res.status}).`

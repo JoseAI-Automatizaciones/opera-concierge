@@ -14,14 +14,21 @@ export type WidgetRow = {
   voice: string;
   llm_model: string;
   allowed_origins: string[];
+  max_sessions_per_minute: number;
+  max_sessions_per_day: number;
+  max_session_seconds: number;
   created_at: string;
   updated_at: string;
 };
 
-/** Public-safe fields returned by /api/widget/config to the embedded widget. */
+/**
+ * Public-safe fields returned by /api/widget/config to the embedded widget.
+ * `max_session_seconds` is included so the widget can enforce the wall-clock
+ * cap client-side (auto-stop the WebRTC connection at the limit).
+ */
 export type PublicWidgetConfig = Pick<
   WidgetRow,
-  "id" | "name" | "primary_color" | "position" | "voice"
+  "id" | "name" | "primary_color" | "position" | "voice" | "max_session_seconds"
 >;
 
 export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
@@ -31,5 +38,6 @@ export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
     primary_color: row.primary_color,
     position: row.position,
     voice: row.voice,
+    max_session_seconds: row.max_session_seconds,
   };
 }

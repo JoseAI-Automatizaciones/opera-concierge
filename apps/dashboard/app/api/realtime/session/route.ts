@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import type { WidgetRow } from "@/lib/supabase/types";
 import { corsHeaders, SENTINEL_ID, uniformNotFound } from "@/lib/api/cors";
+import { bucketKeyFromRequest, consumeQuota } from "@/lib/quotas";
 
 /**
  * POST /api/realtime/session
@@ -14,7 +15,10 @@ import { corsHeaders, SENTINEL_ID, uniformNotFound } from "@/lib/api/cors";
  * session configuration.
  *
  * Authorization: requesting origin must be allowlisted for the widget.
- * All failure paths return a timing-uniform 404 with no body.
+ * Quota: per-widget per-bucket (IP today) caps enforced atomically BEFORE
+ * we mint the token, so an attacker cannot rack up OpenAI billing.
+ * All failure paths return a timing-uniform 404 with no body, EXCEPT quota
+ * exhaustion which returns a clear 429 with `Retry-After`.
  */
 
 const bodySchema = z.object({ widget_id: z.uuid() });
@@ -31,7 +35,6 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   const origin = req.headers.get("origin");
 
-  // Parse body — be tolerant of malformed JSON so the failure path stays uniform.
   let raw: unknown = null;
   try {
     raw = await req.json();
@@ -41,7 +44,6 @@ export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(raw);
   const lookupId = parsed.success ? parsed.data.widget_id : SENTINEL_ID;
 
-  // Always hit the DB regardless of input validity to equalize timing.
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("widgets")
@@ -54,19 +56,39 @@ export async function POST(req: Request) {
     return uniformNotFound(origin);
   }
 
+  // Quota check (Layer 1). Bucket by IP for v1; Layer 2 will accept an
+  // operator-asserted user identifier and bucket per-user instead.
+  const quota = await consumeQuota({
+    widgetId: data.id,
+    bucketKey: bucketKeyFromRequest(req),
+    minuteLimit: data.max_sessions_per_minute,
+    dayLimit: data.max_sessions_per_day,
+  });
+
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: "rate_limited" },
+      {
+        status: 429,
+        headers: {
+          ...corsHeaders(origin),
+          // 60s is conservative: minute window rolls every 60s, day window
+          // every 24h. Most rejections will be the minute window.
+          "Retry-After": "60",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    // Server misconfiguration — surface as 503 to the operator's monitoring.
-    // Not a uniform-404 because it's not a security failure.
     return NextResponse.json(
       { error: "openai_key_not_configured" },
       { status: 503, headers: corsHeaders(origin) }
     );
   }
 
-  // Mint ephemeral key via OpenAI Realtime API. The session config (model,
-  // voice, instructions) is pulled from the widget row — never trusted from
-  // the client.
   const upstream = await fetch(REALTIME_ENDPOINT, {
     method: "POST",
     headers: {

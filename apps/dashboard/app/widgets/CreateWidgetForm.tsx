@@ -84,6 +84,63 @@ export function CreateWidgetForm() {
         </Field>
       </div>
 
+      <fieldset className="rounded-2xl border border-white/[0.06] p-5">
+        <legend className="px-2 text-xs font-medium uppercase tracking-[0.18em] text-opera-gold">
+          Usage limits
+        </legend>
+        <p className="mb-4 text-xs text-opera-muted/80">
+          Protects your OpenAI bill from runaway visitors. Limits apply per
+          visitor (currently per IP).
+        </p>
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Field
+            label="Sessions / minute"
+            htmlFor="max_sessions_per_minute"
+            hint="Burst rate. Default 5."
+          >
+            <input
+              id="max_sessions_per_minute"
+              name="max_sessions_per_minute"
+              type="number"
+              min={1}
+              max={1000}
+              defaultValue={5}
+              className="opera-input font-mono text-sm"
+            />
+          </Field>
+          <Field
+            label="Sessions / day"
+            htmlFor="max_sessions_per_day"
+            hint="Daily cap. Default 15."
+          >
+            <input
+              id="max_sessions_per_day"
+              name="max_sessions_per_day"
+              type="number"
+              min={1}
+              max={100000}
+              defaultValue={15}
+              className="opera-input font-mono text-sm"
+            />
+          </Field>
+          <Field
+            label="Max seconds / session"
+            htmlFor="max_session_seconds"
+            hint="Auto-end the session. Default 480 (8 min)."
+          >
+            <input
+              id="max_session_seconds"
+              name="max_session_seconds"
+              type="number"
+              min={30}
+              max={7200}
+              defaultValue={480}
+              className="opera-input font-mono text-sm"
+            />
+          </Field>
+        </div>
+      </fieldset>
+
       <div className="flex items-center justify-between gap-4">
         <p
           className={`text-xs ${
