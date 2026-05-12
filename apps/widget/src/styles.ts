@@ -217,4 +217,26 @@ export const widgetCss = `
   .end:hover {
     background: rgba(255, 255, 255, 0.05);
   }
+
+  .tool-activity {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .tool-chip {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--opera-amber);
+    background: rgba(210, 176, 107, 0.08);
+    border: 1px solid rgba(210, 176, 107, 0.18);
+    border-radius: 999px;
+    padding: 3px 8px;
+  }
+  .tool-chip[data-ok="false"] {
+    color: #ffb3a8;
+    background: rgba(255, 100, 90, 0.08);
+    border-color: rgba(255, 100, 90, 0.2);
+  }
 `;

@@ -26,6 +26,9 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
   const [transcripts, setTranscripts] = useState<Map<string, TranscriptEntry>>(
     () => new Map()
   );
+  const [toolActivity, setToolActivity] = useState<
+    Array<{ id: string; name: string; ok: boolean }>
+  >([]);
 
   const handleRef = useRef<RealtimeHandle | null>(null);
   const aliveRef = useRef(true);
@@ -84,6 +87,19 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
             next.set(entry.id, entry);
             return next;
           });
+        },
+        onToolCall: (call) => {
+          if (!aliveRef.current) return;
+          setToolActivity((prev) =>
+            [
+              ...prev,
+              {
+                id: `${call.name}-${Date.now()}-${Math.random()}`,
+                name: call.name,
+                ok: call.ok,
+              },
+            ].slice(-5)
+          );
         },
         onError: (err) => {
           if (aliveRef.current) setError(err.message);
@@ -149,6 +165,15 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
                   <span>{entry.text}</span>
                 </div>
               ))}
+              {toolActivity.length > 0 ? (
+                <div class="tool-activity">
+                  {toolActivity.map((t) => (
+                    <span class="tool-chip" key={t.id} data-ok={String(t.ok)}>
+                      {t.ok ? "✓" : "⚠"} {humanizeTool(t.name)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <footer class="footer">
@@ -189,6 +214,25 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
       </div>
     </div>
   );
+}
+
+function humanizeTool(name: string): string {
+  switch (name) {
+    case "find_elements":
+      return "Looked at the page";
+    case "click_element":
+      return "Clicked";
+    case "fill_field":
+      return "Filled a field";
+    case "scroll_to_element":
+      return "Scrolled";
+    case "read_page":
+      return "Read the page";
+    case "navigate_to":
+      return "Navigated";
+    default:
+      return name;
+  }
 }
 
 function statusLabel(status: WidgetStatus, error: string | null): string {

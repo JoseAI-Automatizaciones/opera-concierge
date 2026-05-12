@@ -68,9 +68,21 @@ Build → output:
 - Build artifact is gitignored. Turbo orders widget build before dashboard build via workspace dependency declared in `apps/dashboard/package.json`.
 - For dev: `pnpm --filter @opera-concierge/widget dev` runs the playground at http://localhost:5174.
 
-Not yet implemented (call out before relying on it):
-- DOM tools (click/scroll/fill) — the Realtime data channel parses transcript events only.
-- Cache-busting for `widget.js` — currently a single stable URL with short cache. Add hashed asset + rewrite when we ship the first prod cache miss.
+DOM tools (live):
+- `find_elements`, `click_element`, `fill_field`, `scroll_to_element`, `read_page`, `navigate_to` — registered via `session.update` once the DataChannel opens.
+- Implementations in `src/lib/tools/dom.ts`. Schemas + dispatcher in `src/lib/tools/registry.ts`.
+
+Tool-execution safety invariants (anything new must preserve these):
+1. Protected inputs (password, OTP, `autocomplete^="cc-"`, `data-opera-private`, `contenteditable`) cannot be filled OR read by `read_page`. Centralized in `PROTECTED_SELECTOR`.
+2. Actuating tools (click/fill/scroll) require `resolveSingle` — exactly one element must match the selector; ambiguous → `not_found_or_ambiguous`.
+3. `buildSelector` verifies `#id` uniqueness before returning the id form.
+4. Tools accept `unknown` args and validate with `isObject` + per-field `typeof`. Bad args → `{ok:false,error:"invalid_args"}`.
+5. `navigate_to` blocks cross-origin.
+6. The Realtime tool dispatcher FAILS CLOSED on malformed JSON args — never falls through to default args.
+
+Not yet implemented:
+- Cache-busting for `widget.js` — currently a stable URL with short cache. Add hashed asset + rewrite when we ship the first prod cache miss.
 - Microphone retry / fallback to text-only mode.
+- Operator-defined custom tools (HTTP calls to operator's API).
 
 ⚠ Per OpenAI Realtime docs, the client CAN override `instructions`/`model`/`voice` during the WebRTC handshake. The mint-time config is a *default*, not a policy boundary. Anything the operator wants enforced must be enforced via tool-execution guardrails server-side.
