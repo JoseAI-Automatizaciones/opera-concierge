@@ -69,7 +69,7 @@ For React, Vue, Svelte projects — or when an AI coding agent is integrating Op
 
 ## Tech stack
 
-- Turborepo + pnpm monorepo
+- Turborepo + pnpm
 - Next.js 15 (App Router) — dashboard + API
 - Vite + Preact — widget
 - Vercel AI SDK (`ai`, `@ai-sdk/openai`)
@@ -83,4 +83,4 @@ Opera Concierge is a submarca of **Opera AI**. Visual identity: muted mustard go
 
 ## License
 
-Private. © Jose Bossa / JoseAI-Automatizaciones.
+MIT

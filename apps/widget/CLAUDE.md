@@ -54,4 +54,12 @@ If you are an AI coding agent integrating Opera Concierge into a host React/Vue/
 
 ## Status
 
-🚧 Not yet scaffolded. Next step: `pnpm create vite@latest . --template preact-ts`, then wire Realtime client and DOM tool runtime.
+✅ Scaffolded (Vite 8 + Preact 10 + TypeScript). Default `App.tsx` will be replaced.
+
+Next steps (in order):
+1. Replace `src/App.tsx` content with the floating button + overlay shell.
+2. Set up shadow-DOM mount so host CSS never bleeds in.
+3. Configure `vite.config.ts` for library mode — output a single ESM bundle with content hash to `../../apps/dashboard/public/_widget/`.
+4. Implement init from `data-opera-id` attribute on the `<script>` tag.
+5. Fetch config from `/api/widget/config` on init.
+6. Wire Realtime client (uses `@opera-concierge/voice` package).

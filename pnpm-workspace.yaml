@@ -1,3 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Build scripts approved for security review.
+# sharp: image optimization for Next.js (trusted, widely used)
+# unrs-resolver: Rust-based resolver used by ESLint/Next.js tooling
+allowBuilds:
+  sharp: true
+  unrs-resolver: true

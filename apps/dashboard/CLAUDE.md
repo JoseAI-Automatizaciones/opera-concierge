@@ -30,10 +30,12 @@ All four routes above are called from an **untrusted origin** (the host site emb
 
 ## Stack
 
-- Next.js 15 (App Router) with React Server Components.
-- Vercel AI SDK + AI Elements for chat UI.
-- `@supabase/ssr` for server-side Supabase.
-- Tailwind CSS — Opera AI design tokens defined in `tailwind.config.ts`.
+- Next.js 16 (App Router, Turbopack) with React Server Components — React 19.
+- Tailwind CSS v4 (postcss-based, no `tailwind.config.ts` — config lives in `app/globals.css` via `@theme`).
+- ESLint 9 (flat config in `eslint.config.mjs`).
+- TypeScript with `@/*` import alias.
+- Vercel AI SDK + AI Elements for chat UI (to be added).
+- `@supabase/ssr` for server-side Supabase (to be added).
 
 ## Conventions
 
@@ -48,4 +50,12 @@ All four routes above are called from an **untrusted origin** (the host site emb
 
 ## Status
 
-🚧 Not yet scaffolded. Next step: `pnpm create next-app@latest .` inside this folder, then wire AI SDK, Supabase, Tailwind.
+✅ Scaffolded (Next.js 16.2.6 + React 19 + Tailwind 4 + ESLint 9 + Turbopack).
+
+Next steps (in order):
+1. Define Opera Concierge color tokens in `app/globals.css` (`@theme` block — gold `#B08A3E`, graphite `#0E1117`).
+2. Replace the default Next.js landing page in `app/page.tsx` with a dashboard shell.
+3. Install Supabase client: `pnpm add @supabase/supabase-js @supabase/ssr`.
+4. Install AI SDK: `pnpm add ai @ai-sdk/openai @ai-sdk/anthropic`.
+5. Build the first API route: `app/api/widget/config/route.ts` (GET widget config by id).
+6. Build the first dashboard page: `app/page.tsx` with the widget setup wizard.

@@ -44,7 +44,7 @@ Visitor ──voice/text──▶ Widget (browser)
 | API | Next.js API routes inside `apps/dashboard` (single deploy) |
 | LLM orchestration | Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/anthropic`) |
 | Voice | OpenAI Realtime API (`gpt-realtime`) |
-| Storage | Supabase (project ref: `srrqaipnxtjhbapfgwwa`) |
+| Storage | Supabase (Postgres + Auth + Storage) |
 | Hosting | Vercel (one-click deploy from README) |
 | CLIs available | `gh`, `vercel`, `supabase` |
 
@@ -79,27 +79,18 @@ Every subfolder has its **own `CLAUDE.md`** with local context. Always read it b
 
 ## Quick start
 
-⚠️ **Apps are not yet scaffolded.** The repo currently contains the monorepo skeleton only. Before `pnpm dev` will do anything useful, you must scaffold the apps:
-
 ```bash
-pnpm install                         # installs turbo + typescript only (no app deps yet)
-
-# Then scaffold each app (one-time):
-cd apps/dashboard && pnpm create next-app@latest . --typescript --tailwind --app
-cd ../widget     && pnpm create vite@latest . --template preact-ts
-
-# After scaffolding:
+pnpm install           # installs all workspace deps
 pnpm dev               # turbo runs dashboard + widget in parallel
 ```
 
-Until scaffolded, `pnpm dev` will print the placeholder message in each `apps/*/package.json`.
+The dashboard runs on http://localhost:3000 and the widget dev server on its own port.
 
 ## External resources
 
-- Supabase project dashboard: https://supabase.com/dashboard/project/srrqaipnxtjhbapfgwwa
-- GitHub repo: https://github.com/JoseAI-Automatizaciones/opera-concierge
 - Vercel AI SDK docs: https://sdk.vercel.ai
 - OpenAI Realtime API: https://platform.openai.com/docs/guides/realtime
+- Supabase docs: https://supabase.com/docs
 
 ## Brand
 

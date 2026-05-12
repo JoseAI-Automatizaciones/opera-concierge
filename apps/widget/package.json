@@ -1,11 +1,20 @@
 {
   "name": "@opera-concierge/widget",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "echo 'Not yet scaffolded. Run: pnpm create vite@latest . --template preact-ts'",
-    "build": "echo 'Pending Vite scaffold'",
-    "lint": "echo 'Pending Vite scaffold'",
-    "typecheck": "echo 'Pending Vite scaffold'"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "preact": "^10.29.1"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.5",
+    "@types/node": "^24.12.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12"
   }
 }
