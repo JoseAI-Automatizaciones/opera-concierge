@@ -1,26 +1,49 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Opera Concierge brand tokens */
+  --color-opera-black: #050505;
+  --color-opera-graphite: #0e1117;
+  --color-opera-gold: #b08a3e;
+  --color-opera-amber: #d2b06b;
+  --color-opera-sand: #8e7a57;
+  --color-opera-white: #f5f7fa;
+  --color-opera-muted: #8b93a7;
+
+  --color-background: var(--color-opera-black);
+  --color-foreground: var(--color-opera-white);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 1.25rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html,
+  body {
+    background-color: var(--color-opera-black);
+    color: var(--color-opera-white);
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Ambient gold glow used for hero / cinematic surfaces */
+@utility opera-glow {
+  background-image:
+    radial-gradient(60% 50% at 20% 30%, rgba(176, 138, 62, 0.18), transparent 70%),
+    radial-gradient(40% 35% at 80% 70%, rgba(210, 176, 107, 0.12), transparent 70%);
+}
+
+/* Subtle glass card surface */
+@utility opera-card {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(8px);
 }
