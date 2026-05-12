@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth/session";
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
@@ -28,6 +29,8 @@ export async function createWidget(
   _prev: CreateWidgetState | undefined,
   formData: FormData
 ): Promise<CreateWidgetState> {
+  await requireUser();
+
   const parsed = formSchema.safeParse({
     name: formData.get("name"),
     allowed_origins: formData.get("allowed_origins") ?? "",
@@ -73,6 +76,7 @@ export async function createWidget(
 }
 
 export async function deleteWidget(id: string) {
+  await requireUser();
   const supabase = createAdminClient();
   const { error } = await supabase.from("widgets").delete().eq("id", id);
   if (error) throw new Error(error.message);

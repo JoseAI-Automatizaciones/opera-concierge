@@ -67,8 +67,15 @@ Realtime upstream:
 Server Actions:
 - Same-origin only by default (Next 16 checks Origin vs Host). Do NOT add `serverActions.allowedOrigins` to `next.config.ts` unless we have a specific need.
 
+Auth (live):
+- Supabase Auth magic-link via `lib/auth/session.ts` + `middleware.ts`.
+- `ALLOWED_EMAILS` env (comma-separated) gates which addresses can sign in. Empty = fail closed.
+- Middleware checks `auth.getUser()` session existence on `/widgets/*` and `/api/widgets/*`; page/API layer re-checks allowlist via `requireUser()` / `getApiUser()`.
+- `/auth/confirm` verifies OTP, re-checks allowlist, signs out + redirects to `/login?e=not_allowed` on mismatch.
+- `/auth/signout` is POST-only with Origin-vs-Host same-origin check.
+- All `next` redirect params sanitized via `safeInternalPath()` — open redirects via `//evil.com`, `/\evil`, `/javascript:...` etc. are rejected.
+
 Next steps (in order):
-1. Auth — add Supabase Auth before this dashboard goes anywhere reachable. See root CLAUDE.md "Before going public" checklist.
-2. Rate limiting on `/api/realtime/session` and `/api/widget/config` per widget_id + IP.
-3. Edit-widget page (`/widgets/[id]`) for system prompt, tools, advanced config.
-4. Tools registry UI — operator can register custom API tools that the agent can call.
+1. Rate limiting on `/api/realtime/session` and `/api/widget/config` per widget_id + IP.
+2. Edit-widget page (`/widgets/[id]`) for system prompt, tools, advanced config.
+3. Tools registry UI — operator can register custom API tools that the agent can call.

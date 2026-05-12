@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth/session";
 import type { WidgetRow } from "@/lib/supabase/types";
 import { CreateWidgetForm } from "./CreateWidgetForm";
 import { WidgetRowCard } from "./WidgetRowCard";
@@ -18,6 +19,7 @@ async function loadWidgets(): Promise<WidgetRow[]> {
 }
 
 export default async function WidgetsPage() {
+  const user = await requireUser();
   const widgets = await loadWidgets();
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://your-deploy.vercel.app";
@@ -26,7 +28,7 @@ export default async function WidgetsPage() {
     <div className="relative flex flex-1 flex-col">
       <div className="opera-glow pointer-events-none absolute inset-0 -z-10" />
 
-      <header className="flex items-center justify-between px-8 py-6 sm:px-12">
+      <header className="flex items-center justify-between gap-4 px-8 py-6 sm:px-12">
         <Link href="/" className="block">
           <Image
             src="/logo.png"
@@ -37,9 +39,19 @@ export default async function WidgetsPage() {
             className="h-10 w-auto"
           />
         </Link>
-        <span className="text-xs uppercase tracking-[0.2em] text-opera-muted">
-          Widgets
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="hidden text-xs uppercase tracking-[0.2em] text-opera-muted sm:inline">
+            {user.email}
+          </span>
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-opera-muted transition hover:border-white/20 hover:text-opera-white"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-6 py-10 sm:px-12">
