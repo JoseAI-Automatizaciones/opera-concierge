@@ -1,0 +1,8 @@
+{
+  "name": "@opera-concierge/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Reserved placeholder. API lives inside apps/dashboard in v1.'"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@opera-concierge/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Not yet scaffolded. Run: pnpm create next-app@latest . --typescript --tailwind --app --src-dir=false --import-alias=\"@/*\"'",
+    "build": "echo 'Pending Next.js scaffold'",
+    "lint": "echo 'Pending Next.js scaffold'",
+    "typecheck": "echo 'Pending Next.js scaffold'"
+  }
+}

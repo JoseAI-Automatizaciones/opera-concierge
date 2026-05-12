@@ -1,0 +1,11 @@
+{
+  "name": "@opera-concierge/widget",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Not yet scaffolded. Run: pnpm create vite@latest . --template preact-ts'",
+    "build": "echo 'Pending Vite scaffold'",
+    "lint": "echo 'Pending Vite scaffold'",
+    "typecheck": "echo 'Pending Vite scaffold'"
+  }
+}
