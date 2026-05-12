@@ -47,6 +47,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@opera-concierge/widget':
+        specifier: workspace:*
+        version: link:../widget
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.0

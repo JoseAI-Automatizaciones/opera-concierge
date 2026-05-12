@@ -54,12 +54,23 @@ If you are an AI coding agent integrating Opera Concierge into a host React/Vue/
 
 ## Status
 
-✅ Scaffolded (Vite 8 + Preact 10 + TypeScript). Default `App.tsx` will be replaced.
+✅ Wired end-to-end (Vite 8 IIFE library mode → `apps/dashboard/public/widget.js`, 9 kB gzip).
 
-Next steps (in order):
-1. Replace `src/App.tsx` content with the floating button + overlay shell.
-2. Set up shadow-DOM mount so host CSS never bleeds in.
-3. Configure `vite.config.ts` for library mode — output a single ESM bundle with content hash to `../../apps/dashboard/public/_widget/`.
-4. Implement init from `data-opera-id` attribute on the `<script>` tag.
-5. Fetch config from `/api/widget/config` on init.
-6. Wire Realtime client (uses `@opera-concierge/voice` package).
+How it works:
+1. `src/main.tsx` finds the host page's `<script data-opera-id="...">` tag and reads its config.
+2. Mounts inside a `<opera-concierge-root>` element with `attachShadow({ mode: "open" })`.
+3. Injects `widgetCss` from `src/styles.ts` as the single `<style>` inside the shadow root.
+4. Renders `<App>` (Preact) — floating button + overlay panel.
+5. On click, fetches config via `lib/api.ts`, then mints a Realtime session and opens a WebRTC connection via `lib/realtime.ts`.
+
+Build → output:
+- `pnpm --filter @opera-concierge/widget build` produces `apps/dashboard/public/widget.js` (+ sourcemap).
+- Build artifact is gitignored. Turbo orders widget build before dashboard build via workspace dependency declared in `apps/dashboard/package.json`.
+- For dev: `pnpm --filter @opera-concierge/widget dev` runs the playground at http://localhost:5174.
+
+Not yet implemented (call out before relying on it):
+- DOM tools (click/scroll/fill) — the Realtime data channel parses transcript events only.
+- Cache-busting for `widget.js` — currently a single stable URL with short cache. Add hashed asset + rewrite when we ship the first prod cache miss.
+- Microphone retry / fallback to text-only mode.
+
+⚠ Per OpenAI Realtime docs, the client CAN override `instructions`/`model`/`voice` during the WebRTC handshake. The mint-time config is a *default*, not a policy boundary. Anything the operator wants enforced must be enforced via tool-execution guardrails server-side.

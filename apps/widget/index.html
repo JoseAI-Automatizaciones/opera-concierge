@@ -2,12 +2,74 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>widget</title>
+    <title>Opera Concierge — Widget Playground</title>
+    <style>
+      body {
+        margin: 0;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #f3f3f5;
+        color: #1c1c20;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 4rem 2rem;
+      }
+      h1 {
+        font-size: 1.75rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        color: #5b5b66;
+        line-height: 1.55;
+      }
+      .panel {
+        margin-top: 2rem;
+        padding: 1.25rem 1.5rem;
+        background: white;
+        border-radius: 14px;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        background: #ececef;
+        padding: 0.15em 0.35em;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <main>
+      <h1>Opera Concierge — Widget Playground</h1>
+      <p>
+        This page simulates a customer's site with the Opera Concierge widget
+        embedded. The widget mounts inside a shadow DOM so the host page's
+        CSS is fully isolated.
+      </p>
+      <div class="panel">
+        <strong>Test fixtures</strong>
+        <p>
+          Set <code>data-opera-id</code> and (for dev) <code>data-api-origin</code>
+          on the script tag below to point at a real widget row.
+        </p>
+      </div>
+    </main>
+
+    <!--
+      Replace data-opera-id with a real widget UUID from your Supabase
+      "widgets" table. data-api-origin overrides the script-src derivation
+      when running the dev server.
+    -->
+    <script
+      type="module"
+      src="/src/main.tsx"
+      data-opera-id="00000000-0000-0000-0000-000000000000"
+      data-api-origin="http://localhost:3000"
+    ></script>
   </body>
 </html>

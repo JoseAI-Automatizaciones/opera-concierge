@@ -8,7 +8,7 @@
   </p>
 
   <p>
-    <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FJoseAI-Automatizaciones%2Fopera-concierge&env=OPENAI_API_KEY,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY&envDescription=Required%20keys%20for%20Opera%20Concierge&envLink=https%3A%2F%2Fgithub.com%2FJoseAI-Automatizaciones%2Fopera-concierge%2Fblob%2Fmain%2F.env.example&project-name=opera-concierge&repository-name=opera-concierge">
+    <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FJoseAI-Automatizaciones%2Fopera-concierge&rootDirectory=apps%2Fdashboard&env=OPENAI_API_KEY,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY&envDescription=Required%20keys%20for%20Opera%20Concierge&envLink=https%3A%2F%2Fgithub.com%2FJoseAI-Automatizaciones%2Fopera-concierge%2Fblob%2Fmain%2F.env.example&project-name=opera-concierge&repository-name=opera-concierge">
       <img src="https://vercel.com/button" alt="Deploy with Vercel" />
     </a>
   </p>
