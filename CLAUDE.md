@@ -77,6 +77,16 @@ Every subfolder has its **own `CLAUDE.md`** with local context. Always read it b
 6. **No secrets in committed files.** `.env.local` is gitignored. Use `.env.example` as the documented surface.
 7. **Deploy target is Vercel** — keep everything compatible with serverless functions (no long-running server processes, no filesystem state).
 
+## ⚠ Before going public (must-do checklist)
+
+The repo is open-source-ready and single-user v1. Before flipping the repo to public OR before deploying anywhere reachable from the internet, the following MUST be done:
+
+1. **Add auth to `/api/widgets*`, `/widgets`, and all Server Actions.** Currently unauthenticated by design — without auth, anyone can create widgets, bloating the DB and minting Realtime tokens billed to the operator. Read-only `/api/widget/config` is OK to stay public (origin allowlist is the boundary), but writes must be gated.
+2. **Treat Realtime ephemeral tokens as untrusted on the client side.** OpenAI's `client_secrets` endpoint sets session defaults but clients CAN override `instructions`, `model`, `voice` during WebRTC handshake. Do not rely on the mint-time config as a policy boundary — anything the operator wants enforced must be enforced server-side (e.g. via tool execution guardrails), not via prompt-injection-via-instructions.
+3. **Add rate limiting** to `/api/realtime/session` and `/api/widget/config` per `widget_id` and per IP. Realtime tokens cost money to mint.
+
+These are tracked here intentionally; do not lose them.
+
 ## Quick start
 
 ```bash

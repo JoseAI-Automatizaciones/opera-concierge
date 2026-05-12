@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -38,16 +39,12 @@ export default function Home() {
           </p>
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              disabled
-              className="inline-flex h-12 cursor-not-allowed items-center justify-center gap-2 rounded-full bg-opera-gold px-6 text-sm font-medium text-opera-black opacity-90 transition hover:bg-opera-amber disabled:cursor-not-allowed"
+            <Link
+              href="/widgets"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-opera-gold px-6 text-sm font-medium text-opera-black transition hover:bg-opera-amber"
             >
               Create your first widget
-              <span className="text-xs uppercase tracking-[0.18em] text-opera-black/60">
-                soon
-              </span>
-            </button>
+            </Link>
             <a
               href="https://github.com/JoseAI-Automatizaciones/opera-concierge"
               target="_blank"

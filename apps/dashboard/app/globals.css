@@ -47,3 +47,27 @@
   border-radius: var(--radius-card);
   backdrop-filter: blur(8px);
 }
+
+/* Minimal dark input shared by form fields */
+@utility opera-input {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.625rem;
+  padding: 0.6rem 0.85rem;
+  color: var(--color-opera-white);
+  font-size: 0.875rem;
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+@utility opera-input {
+  &:focus {
+    border-color: var(--color-opera-gold);
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+  &::placeholder {
+    color: var(--color-opera-muted);
+  }
+}

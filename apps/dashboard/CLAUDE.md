@@ -50,12 +50,25 @@ All four routes above are called from an **untrusted origin** (the host site emb
 
 ## Status
 
-✅ Scaffolded (Next.js 16.2.6 + React 19 + Tailwind 4 + ESLint 9 + Turbopack).
+✅ Scaffolded + first vertical slice landed (Next.js 16.2.6 + React 19 + Tailwind 4).
+
+Live routes:
+- `/` — marketing/dashboard landing
+- `/widgets` — list + create form (Server Action)
+- `/api/widgets` (GET list / POST create) — same-origin mgmt API
+- `/api/widget/config` (GET) — public, origin-allowlist gated
+- `/api/realtime/session` (POST) — mints OpenAI Realtime ephemeral token
+
+Realtime upstream:
+- Endpoint: `POST https://api.openai.com/v1/realtime/client_secrets`
+- Body shape used: `{ session: { type: "realtime", model, instructions, audio: { output: { voice } } } }`
+- ⚠ Per OpenAI docs, clients CAN override `instructions`/`model`/`voice` during the WebRTC handshake — treat mint-time config as defaults, not policy.
+
+Server Actions:
+- Same-origin only by default (Next 16 checks Origin vs Host). Do NOT add `serverActions.allowedOrigins` to `next.config.ts` unless we have a specific need.
 
 Next steps (in order):
-1. Define Opera Concierge color tokens in `app/globals.css` (`@theme` block — gold `#B08A3E`, graphite `#0E1117`).
-2. Replace the default Next.js landing page in `app/page.tsx` with a dashboard shell.
-3. Install Supabase client: `pnpm add @supabase/supabase-js @supabase/ssr`.
-4. Install AI SDK: `pnpm add ai @ai-sdk/openai @ai-sdk/anthropic`.
-5. Build the first API route: `app/api/widget/config/route.ts` (GET widget config by id).
-6. Build the first dashboard page: `app/page.tsx` with the widget setup wizard.
+1. Auth — add Supabase Auth before this dashboard goes anywhere reachable. See root CLAUDE.md "Before going public" checklist.
+2. Rate limiting on `/api/realtime/session` and `/api/widget/config` per widget_id + IP.
+3. Edit-widget page (`/widgets/[id]`) for system prompt, tools, advanced config.
+4. Tools registry UI — operator can register custom API tools that the agent can call.
