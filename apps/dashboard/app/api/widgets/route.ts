@@ -12,12 +12,15 @@ import { rowsToSafe, toSafeRow, type WidgetRow } from "@/lib/supabase/types";
  * Supabase client because RLS revokes anon SELECT on widgets.
  */
 
-async function requireAuth() {
+async function requireAuthUser() {
   const user = await getApiUser();
   if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return {
+      user: null,
+      response: NextResponse.json({ error: "unauthorized" }, { status: 401 }),
+    };
   }
-  return null;
+  return { user, response: null };
 }
 
 const createSchema = z.object({
@@ -36,13 +39,14 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const { user, response } = await requireAuthUser();
+  if (response) return response;
 
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("widgets")
     .select("*")
+    .eq("owner_user_id", user.id)
     .order("created_at", { ascending: false })
     .returns<WidgetRow[]>();
 
@@ -55,8 +59,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const unauth = await requireAuth();
-  if (unauth) return unauth;
+  const { user, response } = await requireAuthUser();
+  if (response) return response;
 
   let raw: unknown;
   try {
@@ -76,7 +80,7 @@ export async function POST(req: Request) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("widgets")
-    .insert(parsed.data)
+    .insert({ ...parsed.data, owner_user_id: user.id })
     .select("*")
     .single<WidgetRow>();
 

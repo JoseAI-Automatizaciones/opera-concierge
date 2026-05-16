@@ -12,11 +12,12 @@ import { WidgetRowCard } from "./WidgetRowCard";
 
 export const dynamic = "force-dynamic";
 
-async function loadWidgets(): Promise<WidgetRowSafe[]> {
+async function loadWidgets(ownerId: string): Promise<WidgetRowSafe[]> {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("widgets")
     .select("*")
+    .eq("owner_user_id", ownerId)
     .order("created_at", { ascending: false })
     .returns<WidgetRow[]>();
   // Drop openai_api_key before any data crosses into the (client) render path.
@@ -25,7 +26,7 @@ async function loadWidgets(): Promise<WidgetRowSafe[]> {
 
 export default async function WidgetsPage() {
   const user = await requireUser();
-  const widgets = await loadWidgets();
+  const widgets = await loadWidgets(user.id);
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://your-deploy.vercel.app";
 

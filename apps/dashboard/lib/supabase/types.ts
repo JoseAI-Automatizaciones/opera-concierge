@@ -24,6 +24,13 @@ export type WidgetRow = {
    * the operator hasn't yet supplied a key.
    */
   openai_api_key: string | null;
+  /**
+   * auth.users.id of the operator who owns this widget. Populated on
+   * insert; the dashboard filters queries by this column so each operator
+   * only sees their own widgets. Nullable for back-compat with pre-feature
+   * rows; new inserts MUST set it.
+   */
+  owner_user_id: string | null;
   created_at: string;
   updated_at: string;
 };

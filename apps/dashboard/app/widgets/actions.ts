@@ -41,7 +41,7 @@ export async function createWidget(
   _prev: CreateWidgetState | undefined,
   formData: FormData
 ): Promise<CreateWidgetState> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = formSchema.safeParse({
     name: formData.get("name"),
@@ -87,6 +87,7 @@ export async function createWidget(
     max_session_seconds: parsed.data.max_session_seconds,
     max_response_output_tokens: parsed.data.max_response_output_tokens,
     openai_api_key: parsed.data.openai_api_key,
+    owner_user_id: user.id,
   });
 
   if (error) {
@@ -98,9 +99,16 @@ export async function createWidget(
 }
 
 export async function deleteWidget(id: string) {
-  await requireUser();
+  const user = await requireUser();
   const supabase = createAdminClient();
-  const { error } = await supabase.from("widgets").delete().eq("id", id);
+  // Scope delete to the operator's own widgets — even though admin client
+  // bypasses RLS, the explicit owner filter prevents one operator from
+  // deleting another's widget by guessing the id.
+  const { error } = await supabase
+    .from("widgets")
+    .delete()
+    .eq("id", id)
+    .eq("owner_user_id", user.id);
   if (error) throw new Error(error.message);
   revalidatePath("/widgets");
 }
