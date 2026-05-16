@@ -21,6 +21,7 @@ const formSchema = z.object({
   max_sessions_per_minute: z.coerce.number().int().min(1).max(1000),
   max_sessions_per_day: z.coerce.number().int().min(1).max(100000),
   max_session_seconds: z.coerce.number().int().min(30).max(7200),
+  max_response_output_tokens: z.coerce.number().int().min(100).max(4096),
 });
 
 export type CreateWidgetState = {
@@ -43,6 +44,7 @@ export async function createWidget(
     max_sessions_per_minute: formData.get("max_sessions_per_minute") ?? 5,
     max_sessions_per_day: formData.get("max_sessions_per_day") ?? 15,
     max_session_seconds: formData.get("max_session_seconds") ?? 480,
+    max_response_output_tokens: formData.get("max_response_output_tokens") ?? 4096,
   });
 
   if (!parsed.success) {
@@ -74,6 +76,7 @@ export async function createWidget(
     max_sessions_per_minute: parsed.data.max_sessions_per_minute,
     max_sessions_per_day: parsed.data.max_sessions_per_day,
     max_session_seconds: parsed.data.max_session_seconds,
+    max_response_output_tokens: parsed.data.max_response_output_tokens,
   });
 
   if (error) {

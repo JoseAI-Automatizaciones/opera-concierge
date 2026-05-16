@@ -17,6 +17,7 @@ export type WidgetRow = {
   max_sessions_per_minute: number;
   max_sessions_per_day: number;
   max_session_seconds: number;
+  max_response_output_tokens: number;
   created_at: string;
   updated_at: string;
 };

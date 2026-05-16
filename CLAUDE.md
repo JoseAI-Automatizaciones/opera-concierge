@@ -83,9 +83,18 @@ Before flipping the repo to public OR deploying anywhere reachable from the inte
 
 1. ✅ **Auth on `/api/widgets*`, `/widgets`, Server Actions.** Done — Supabase Auth magic link + `ALLOWED_EMAILS` allowlist. Middleware refreshes session, every protected page/API re-checks allowlist. `/auth/signout` has same-origin check.
 2. ✅ **Rate limiting on `/api/realtime/session`** (Layer 1). Done — per-widget configurable caps (sessions/minute, sessions/day, max session seconds) enforced atomically via `consume_quota` Postgres function. Bucket is `ip:<addr>` for v1; Layer 2 will switch to operator-asserted user identity when present.
-3. **Treat Realtime ephemeral tokens as untrusted on the client side.** OpenAI's `client_secrets` endpoint sets session defaults but clients CAN override `instructions`, `model`, `voice` during WebRTC handshake. Do not rely on mint-time config as a policy boundary — anything the operator wants enforced must be enforced via tool-execution guardrails server-side.
+3. ✅ **Realtime token policy boundary (best effort).** Done — `expires_after: 120s` shortens the window for token reuse after theft, `max_output_tokens` cap sent at mint time bounds well-behaved-client cost.
+
+   ⚠ **Threat model truth:** once a Realtime session is live in the browser, the client can `session.update` to override `instructions`, `voice`, `model`, and tools. The mint-time config is a DEFAULT, not a hard boundary. The real defenses are:
+   - **Origin allowlist** on `/api/realtime/session` — attacker must control the operator's domain to mint at all (server-side, unforgeable).
+   - **Per-widget mint quotas** (Layer 1) — bounds the rate at which billable sessions can even start.
+   - **Operator's OpenAI account spending cap** — MUST be set by the operator in their OpenAI dashboard. This is the final, externally-configured brake that nothing in this codebase can replace.
+
+   The dashboard form surfaces this caveat to operators.
+
 4. **Set `ALLOWED_EMAILS`** in the deploy environment. Empty/undefined fails closed (no one can sign in), but worth verifying after deploy.
-5. **(Future)** Rate limiting on `/api/widget/config` (read-only, lower impact but worth adding). Layer 2 (operator-asserted visitor identity). Layer 3 (per-tool-call quotas).
+5. **Set OpenAI account spending cap** in the operator's OpenAI dashboard. This is non-negotiable for production; nothing in this codebase substitutes for it.
+6. **(Future)** Rate limiting on `/api/widget/config` (read-only, lower impact but worth adding). Layer 2 (operator-asserted visitor identity). Layer 3 (per-tool-call quotas).
 
 These are tracked here intentionally; do not lose them.
 

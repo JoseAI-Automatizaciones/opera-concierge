@@ -89,6 +89,13 @@ export async function POST(req: Request) {
     );
   }
 
+  // Token-policy boundary (best effort — see CLAUDE.md):
+  //   - expires_after: short validity for the client_secret so a leaked
+  //     token cannot be reused outside its intended session-startup window.
+  //   - max_output_tokens: per-response token cap at mint time. The client
+  //     can override via session.update once connected, so this bounds the
+  //     well-behaved-client cost. Real billing protection is Layer 1 quotas
+  //     plus the operator's OpenAI account spending cap.
   const upstream = await fetch(REALTIME_ENDPOINT, {
     method: "POST",
     headers: {
@@ -96,11 +103,13 @@ export async function POST(req: Request) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
+      expires_after: { anchor: "created_at", seconds: 120 },
       session: {
         type: "realtime",
         model: data.llm_model,
         instructions: data.system_prompt,
         audio: { output: { voice: data.voice } },
+        max_output_tokens: data.max_response_output_tokens,
       },
     }),
   });

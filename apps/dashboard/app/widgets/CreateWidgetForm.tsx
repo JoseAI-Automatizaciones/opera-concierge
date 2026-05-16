@@ -138,7 +138,28 @@ export function CreateWidgetForm() {
               className="opera-input font-mono text-sm"
             />
           </Field>
+          <Field
+            label="Max tokens / response"
+            htmlFor="max_response_output_tokens"
+            hint="Caps each assistant reply at mint time. Default 4096."
+          >
+            <input
+              id="max_response_output_tokens"
+              name="max_response_output_tokens"
+              type="number"
+              min={100}
+              max={4096}
+              defaultValue={4096}
+              className="opera-input font-mono text-sm"
+            />
+          </Field>
         </div>
+        <p className="mt-4 text-xs text-opera-muted/70">
+          ⚠ These caps protect against well-behaved clients only. A determined
+          attacker can override session config during the WebRTC handshake.
+          Your real billing brake is your OpenAI account spending limit — set
+          it in your OpenAI dashboard.
+        </p>
       </fieldset>
 
       <div className="flex items-center justify-between gap-4">
