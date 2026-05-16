@@ -40,3 +40,5 @@ coverage/
 # Widget build artifact (produced by `pnpm --filter @opera-concierge/widget build`)
 apps/dashboard/public/widget.js
 apps/dashboard/public/widget.js.map
+
+.vercel

@@ -1,9 +1,29 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "ALLOWED_EMAILS",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_WIDGET_CDN_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
+    },
+    "@opera-concierge/widget#build": {
+      "outputs": [
+        "../dashboard/public/widget.js",
+        "../dashboard/public/widget.js.map"
+      ]
     },
     "dev": {
       "cache": false,
