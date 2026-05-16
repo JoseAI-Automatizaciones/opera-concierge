@@ -234,6 +234,16 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Magic-link email: rewritten so it uses the modern token_hash flow.
+# Supabase's default magic-link template uses the legacy flow that returns
+# the session in the URL fragment — which never reaches the server, so our
+# /auth/confirm route can't establish the session. This template builds a
+# URL with token_hash in the query string, which the route handles via
+# supabase.auth.verifyOtp().
+[auth.email.template.magic_link]
+subject = "Your Opera Concierge sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
