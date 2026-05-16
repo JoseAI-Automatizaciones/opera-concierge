@@ -1,7 +1,29 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+// Force dynamic so we can read searchParams (?code=… from the Supabase
+// PKCE magic-link redirect that lands on the site root when no explicit
+// redirectTo applies).
+export const dynamic = "force-dynamic";
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string }>;
+}) {
+  const params = await searchParams;
+
+  // Supabase's PKCE flow can deposit ?code=… at the site root. We can't
+  // exchange the code here — Server Components are not allowed to write
+  // cookies — so hand off to the /auth/confirm Route Handler which can.
+  // The handler does the exchange, runs the allowlist re-check, and
+  // bounces the user into the dashboard.
+  if (params.code) {
+    const target = `/auth/confirm?code=${encodeURIComponent(params.code)}&next=/widgets`;
+    redirect(target);
+  }
+
   return (
     <div className="relative flex flex-1 flex-col">
       <div className="opera-glow pointer-events-none absolute inset-0 -z-10" />
