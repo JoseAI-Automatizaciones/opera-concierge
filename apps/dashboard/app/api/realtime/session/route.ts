@@ -81,10 +81,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  // OpenAI key is per-widget — the operator supplies it via the dashboard
+  // when creating the widget. We DO NOT fall back to a global env var,
+  // because each widget can use a different operator's OpenAI account.
+  const apiKey = data.openai_api_key;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "openai_key_not_configured" },
+      { error: "widget_openai_key_not_configured" },
       { status: 503, headers: corsHeaders(origin) }
     );
   }

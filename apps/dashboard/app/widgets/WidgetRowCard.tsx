@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { WidgetRow } from "@/lib/supabase/types";
+import type { WidgetRowSafe } from "@/lib/supabase/types";
 import { deleteWidget } from "./actions";
 
 export function WidgetRowCard({
   widget,
   appUrl,
 }: {
-  widget: WidgetRow;
+  widget: WidgetRowSafe;
   appUrl: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -77,12 +77,18 @@ export function WidgetRowCard({
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-[10px] uppercase tracking-[0.14em] text-opera-muted">
+      <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.14em] text-opera-muted">
         <span>{widget.max_sessions_per_minute}/min</span>
         <span>·</span>
         <span>{widget.max_sessions_per_day}/day</span>
         <span>·</span>
         <span>{Math.round(widget.max_session_seconds / 60)} min cap</span>
+        <span>·</span>
+        {widget.has_openai_api_key ? (
+          <span className="text-opera-amber">OpenAI key set</span>
+        ) : (
+          <span className="text-red-300">⚠ no OpenAI key</span>
+        )}
       </div>
 
       <footer className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">

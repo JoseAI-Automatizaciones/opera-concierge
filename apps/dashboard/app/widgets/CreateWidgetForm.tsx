@@ -42,6 +42,24 @@ export function CreateWidgetForm() {
         />
       </Field>
 
+      <Field
+        label="OpenAI API key"
+        htmlFor="openai_api_key"
+        hint="Used to mint Realtime sessions for this widget. Stays server-side — never sent to visitors. Get one at platform.openai.com → API keys."
+      >
+        <input
+          id="openai_api_key"
+          name="openai_api_key"
+          type="password"
+          autoComplete="off"
+          required
+          minLength={20}
+          maxLength={500}
+          placeholder="sk-…"
+          className="opera-input font-mono text-sm"
+        />
+      </Field>
+
       <div className="grid gap-5 sm:grid-cols-3">
         <Field label="Primary color" htmlFor="primary_color">
           <input

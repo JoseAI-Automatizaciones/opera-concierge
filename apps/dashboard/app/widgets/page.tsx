@@ -2,20 +2,25 @@ import Image from "next/image";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
-import type { WidgetRow } from "@/lib/supabase/types";
+import {
+  rowsToSafe,
+  type WidgetRow,
+  type WidgetRowSafe,
+} from "@/lib/supabase/types";
 import { CreateWidgetForm } from "./CreateWidgetForm";
 import { WidgetRowCard } from "./WidgetRowCard";
 
 export const dynamic = "force-dynamic";
 
-async function loadWidgets(): Promise<WidgetRow[]> {
+async function loadWidgets(): Promise<WidgetRowSafe[]> {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("widgets")
     .select("*")
     .order("created_at", { ascending: false })
     .returns<WidgetRow[]>();
-  return data ?? [];
+  // Drop openai_api_key before any data crosses into the (client) render path.
+  return rowsToSafe(data);
 }
 
 export default async function WidgetsPage() {

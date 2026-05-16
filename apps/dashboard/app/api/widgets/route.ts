@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getApiUser } from "@/lib/auth/session";
-import type { WidgetRow } from "@/lib/supabase/types";
+import { rowsToSafe, toSafeRow, type WidgetRow } from "@/lib/supabase/types";
 
 /**
  * /api/widgets
@@ -49,7 +49,9 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ widgets: data ?? [] });
+  // Strip openai_api_key before responding — same-origin authenticated
+  // browser still shouldn't receive raw operator secrets in the JSON.
+  return NextResponse.json({ widgets: rowsToSafe(data) });
 }
 
 export async function POST(req: Request) {
@@ -81,5 +83,6 @@ export async function POST(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ widget: data }, { status: 201 });
+  // Strip openai_api_key from the response.
+  return NextResponse.json({ widget: data ? toSafeRow(data) : null }, { status: 201 });
 }

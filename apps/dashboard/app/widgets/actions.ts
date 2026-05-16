@@ -22,6 +22,14 @@ const formSchema = z.object({
   max_sessions_per_day: z.coerce.number().int().min(1).max(100000),
   max_session_seconds: z.coerce.number().int().min(30).max(7200),
   max_response_output_tokens: z.coerce.number().int().min(100).max(4096),
+  openai_api_key: z
+    .string()
+    .trim()
+    .min(20, "OpenAI key looks too short.")
+    .max(500)
+    .refine((v) => v.startsWith("sk-"), {
+      message: "OpenAI keys typically start with 'sk-'.",
+    }),
 });
 
 export type CreateWidgetState = {
@@ -45,6 +53,7 @@ export async function createWidget(
     max_sessions_per_day: formData.get("max_sessions_per_day") ?? 15,
     max_session_seconds: formData.get("max_session_seconds") ?? 480,
     max_response_output_tokens: formData.get("max_response_output_tokens") ?? 4096,
+    openai_api_key: formData.get("openai_api_key") ?? "",
   });
 
   if (!parsed.success) {
@@ -77,6 +86,7 @@ export async function createWidget(
     max_sessions_per_day: parsed.data.max_sessions_per_day,
     max_session_seconds: parsed.data.max_session_seconds,
     max_response_output_tokens: parsed.data.max_response_output_tokens,
+    openai_api_key: parsed.data.openai_api_key,
   });
 
   if (error) {
