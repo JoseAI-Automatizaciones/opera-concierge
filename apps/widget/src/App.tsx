@@ -18,11 +18,14 @@ import {
 type Props = {
   widgetId: string;
   apiOrigin: string;
+  /** Operator-asserted visitor identity (Layer 2 unsigned). Forwarded
+   *  to the mint endpoint; the backend buckets quotas by user when present. */
+  visitorId?: string;
   /** The custom-element host owning the shadow root this app is mounted in. */
   shadowHost: HTMLElement;
 };
 
-export function App({ widgetId, apiOrigin, shadowHost }: Props) {
+export function App({ widgetId, apiOrigin, visitorId, shadowHost }: Props) {
   const [status, setStatus] = useState<WidgetStatus>("loading-config");
   const [config, setConfig] = useState<PublicWidgetConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
     setError(null);
     setStatus("connecting");
     try {
-      const session = await mintRealtimeSession(apiOrigin, widgetId);
+      const session = await mintRealtimeSession(apiOrigin, widgetId, visitorId);
       if (!aliveRef.current) return;
 
       const handle = await connectRealtime(session, {

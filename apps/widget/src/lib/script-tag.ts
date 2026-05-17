@@ -9,7 +9,26 @@
 export type ScriptConfig = {
   widgetId: string;
   apiOrigin: string;
+  /**
+   * Operator-asserted visitor identity (Layer 2 — unsigned mode). The
+   * host site declares "this visitor is user X" via
+   *   <script ... data-opera-user-id="user_123" defer></script>
+   * We trust the operator's frontend declaration in unsigned mode; quotas
+   * bucket by `user:<id>` instead of `ip:<addr>` when present, so a single
+   * visitor across IPs / devices gets a coherent rate-limit budget.
+   *
+   * If the operator wants the assertion to be unforgeable (a visitor
+   * couldn't lie about their identity by editing the script tag), use the
+   * signed-JWT mode — a separate option set in the dashboard.
+   */
+  visitorId?: string;
 };
+
+/** Tight allowlist for visitor IDs: alphanum and a few safe separators.
+ *  Rejects whitespace, slashes, JSON-breaking chars, etc. — keeps the
+ *  bucket-key column predictable and prevents an attacker from squatting
+ *  on bucket keys via crafted IDs. */
+const VISITOR_ID_PATTERN = /^[A-Za-z0-9._\-:@]{1,128}$/;
 
 class ScriptConfigError extends Error {}
 
@@ -42,7 +61,22 @@ export function readScriptConfig(): ScriptConfig {
       ? new URL(tag.src, location.href).origin
       : location.origin;
 
-  return { widgetId, apiOrigin };
+  const rawVisitor = tag.dataset.operaUserId?.trim();
+  let visitorId: string | undefined;
+  if (rawVisitor) {
+    if (VISITOR_ID_PATTERN.test(rawVisitor)) {
+      visitorId = rawVisitor;
+    } else {
+      // Reject quietly with a console warning — we don't want to block
+      // widget startup just because the operator typed a wrong ID format.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "Opera Concierge: data-opera-user-id format invalid (allowed: alphanumeric . _ - : @, max 128 chars). Falling back to IP-based quotas."
+      );
+    }
+  }
+
+  return { widgetId, apiOrigin, visitorId };
 }
 
 export { ScriptConfigError };

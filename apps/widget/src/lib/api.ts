@@ -30,14 +30,17 @@ export class RateLimitedError extends Error {
 
 export async function mintRealtimeSession(
   apiOrigin: string,
-  widgetId: string
+  widgetId: string,
+  visitorId?: string
 ): Promise<RealtimeSession> {
   const url = `${apiOrigin}/api/realtime/session`;
+  const body: Record<string, string> = { widget_id: widgetId };
+  if (visitorId) body.visitor_id = visitorId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "omit",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ widget_id: widgetId }),
+    body: JSON.stringify(body),
   });
   if (res.status === 429) {
     throw new RateLimitedError();

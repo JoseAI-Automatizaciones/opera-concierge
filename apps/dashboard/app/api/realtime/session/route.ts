@@ -21,7 +21,19 @@ import { bucketKeyFromRequest, consumeQuota } from "@/lib/quotas";
  * exhaustion which returns a clear 429 with `Retry-After`.
  */
 
-const bodySchema = z.object({ widget_id: z.uuid() });
+/** Operator-asserted visitor identity. The widget reads this from
+ *  data-opera-user-id and forwards it. We mirror the widget's tight
+ *  allowlist server-side so a malicious page can't poison the bucket
+ *  key column with whitespace, slashes, etc. */
+const VISITOR_ID_PATTERN = /^[A-Za-z0-9._\-:@]{1,128}$/;
+
+const bodySchema = z.object({
+  widget_id: z.uuid(),
+  visitor_id: z
+    .string()
+    .regex(VISITOR_ID_PATTERN, "invalid_visitor_id")
+    .optional(),
+});
 
 const REALTIME_ENDPOINT = "https://api.openai.com/v1/realtime/client_secrets";
 
@@ -106,15 +118,25 @@ export async function POST(req: Request) {
     return uniformNotFound(origin);
   }
 
-  // Quota check (Layer 1). Bucket by IP for v1; Layer 2 will accept an
-  // operator-asserted user identifier and bucket per-user instead.
+  // Quota check. The unsigned visitor_id is forgeable — an attacker on an
+  // allowed origin can edit it in DevTools and cycle through random IDs to
+  // bypass per-user caps. So when visitor_id is present we charge BOTH
+  // buckets (ip:<addr> AND user:<id>) atomically: consume_dual_quota peeks
+  // both, allows only if BOTH would stay under cap, and increments NEITHER
+  // when either would fail. This prevents:
+  //   - Rotation attacks: each fake user_id still hits the shared IP cap.
+  //   - Cross-bucket cascade: a user at their cap retrying doesn't burn
+  //     the shared IP bucket (no increment when over limit). Equally, a
+  //     visitor on a NAT whose IP is exhausted doesn't burn their personal
+  //     user-bucket on requests that never minted a session.
+  const visitorId = parsed.success ? parsed.data.visitor_id ?? null : null;
   const quota = await consumeQuota({
     widgetId: data.id,
-    bucketKey: bucketKeyFromRequest(req),
+    primaryBucket: bucketKeyFromRequest(req),
+    secondaryBucket: visitorId ? `user:${visitorId}` : null,
     minuteLimit: data.max_sessions_per_minute,
     dayLimit: data.max_sessions_per_day,
   });
-
   if (!quota.allowed) {
     return NextResponse.json(
       { error: "rate_limited" },
@@ -149,6 +171,16 @@ export async function POST(req: Request) {
   //     can override via session.update once connected, so this bounds the
   //     well-behaved-client cost. Real billing protection is Layer 1 quotas
   //     plus the operator's OpenAI account spending cap.
+  let instructions = DEFAULT_AGENT_PROMPT + (data.system_prompt ?? "");
+  if (visitorId) {
+    // Append visitor identity AFTER the operator prompt so personality
+    // hints (e.g. "address by first name") can still influence behavior.
+    // Do NOT instruct the model to read the ID aloud — IDs are commonly
+    // numeric / opaque and leaking them in voice is a privacy footgun.
+    instructions +=
+      `\n\n## Visitor\nThe operator's frontend has identified this visitor as "${visitorId}" (unsigned assertion). Use it for context if their personality prompt suggests how; do NOT read the raw ID aloud.`;
+  }
+
   const upstream = await fetch(REALTIME_ENDPOINT, {
     method: "POST",
     headers: {
@@ -160,11 +192,7 @@ export async function POST(req: Request) {
       session: {
         type: "realtime",
         model: data.llm_model,
-        // Combine the built-in agent behavior (hard rules about tool use,
-        // snapshot reliance, no-hallucination) with the operator's
-        // personality/domain prompt. Operator content is appended so it
-        // cannot override the hard rules above it.
-        instructions: DEFAULT_AGENT_PROMPT + (data.system_prompt ?? ""),
+        instructions,
         audio: { output: { voice: data.voice } },
         max_output_tokens: data.max_response_output_tokens,
       },
