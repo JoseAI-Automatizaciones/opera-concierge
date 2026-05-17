@@ -1,5 +1,6 @@
 import type { RealtimeSession, TranscriptEntry } from "../types";
 import { dispatchTool, toolDefinitions } from "./tools/registry";
+import { readPage } from "./tools/dom";
 
 /**
  * OpenAI Realtime WebRTC client.
@@ -104,6 +105,34 @@ export async function connectRealtime(
         type: "session.update",
         session: { tools: toolDefinitions, tool_choice: "auto" },
       });
+
+      // Pre-inject the current page snapshot as a system-side conversation
+      // item. This saves the obligatory read_page round-trip on first turn:
+      // by the time the user finishes speaking, the agent already has the
+      // selectors + text it needs to act in one tool call.
+      try {
+        const snapshot = readPage({});
+        if (snapshot && (snapshot as { ok?: boolean }).ok) {
+          sendEvent({
+            type: "conversation.item.create",
+            item: {
+              type: "message",
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "PAGE_SNAPSHOT (preloaded — use these selectors directly, do NOT call read_page again unless the page changes):\n" +
+                    JSON.stringify(snapshot, null, 0).slice(0, 6000),
+                },
+              ],
+            },
+          });
+        }
+      } catch {
+        // Snapshot is a best-effort optimization — if it fails, the agent
+        // can still fall back to calling read_page itself.
+      }
     });
 
     dc.addEventListener("message", (evt) => {

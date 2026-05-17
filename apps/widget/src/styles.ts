@@ -220,23 +220,40 @@ export const widgetCss = `
 
   .tool-activity {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 4px;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
   }
   .tool-chip {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--opera-amber);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: 8px;
     background: rgba(210, 176, 107, 0.08);
-    border: 1px solid rgba(210, 176, 107, 0.18);
-    border-radius: 999px;
-    padding: 3px 8px;
+    border: 1px solid rgba(210, 176, 107, 0.22);
+    color: var(--opera-amber);
+  }
+  .tool-chip-head {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .tool-chip-detail {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    color: rgba(245, 247, 250, 0.62);
+    word-break: break-all;
   }
   .tool-chip[data-ok="false"] {
     color: #ffb3a8;
     background: rgba(255, 100, 90, 0.08);
-    border-color: rgba(255, 100, 90, 0.2);
+    border-color: rgba(255, 100, 90, 0.28);
+  }
+  .tool-chip[data-ok="false"] .tool-chip-detail {
+    color: rgba(255, 179, 168, 0.7);
   }
 `;

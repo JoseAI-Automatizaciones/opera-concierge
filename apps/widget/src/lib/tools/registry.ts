@@ -127,20 +127,34 @@ export function dispatchTool(name: string, args: unknown): unknown {
     unknown
   >;
 
+  let result: unknown;
   switch (name) {
     case "find_elements":
-      return findElements(a as { query: string; limit?: number });
+      result = findElements(a as { query: string; limit?: number });
+      break;
     case "click_element":
-      return clickElement(a as { selector: string });
+      result = clickElement(a as { selector: string });
+      break;
     case "fill_field":
-      return fillField(a as { selector: string; value: string });
+      result = fillField(a as { selector: string; value: string });
+      break;
     case "scroll_to_element":
-      return scrollToElement(a as { selector: string });
+      result = scrollToElement(a as { selector: string });
+      break;
     case "read_page":
-      return readPage(a as { selector?: string; max_chars?: number });
+      result = readPage(a as { selector?: string; max_chars?: number });
+      break;
     case "navigate_to":
-      return navigateTo(a as { url: string });
+      result = navigateTo(a as { url: string });
+      break;
     default:
-      return { ok: false, error: "unknown_tool", tool: name };
+      result = { ok: false, error: "unknown_tool", tool: name };
   }
+
+  // Diagnostic log — visible in the host page's DevTools console so the
+  // operator can see whether the model is actually calling tools (and with
+  // what args) when something appears not to work.
+  // eslint-disable-next-line no-console
+  console.log("[opera-concierge] tool:", name, "args:", a, "→", result);
+  return result;
 }

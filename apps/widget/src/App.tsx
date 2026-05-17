@@ -31,7 +31,7 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
     () => new Map()
   );
   const [toolActivity, setToolActivity] = useState<
-    Array<{ id: string; name: string; ok: boolean }>
+    Array<{ id: string; name: string; ok: boolean; detail: string }>
   >([]);
 
   const handleRef = useRef<RealtimeHandle | null>(null);
@@ -112,6 +112,15 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
         },
         onToolCall: (call) => {
           if (!aliveRef.current) return;
+          const args = (call.args ?? {}) as Record<string, unknown>;
+          const detail =
+            typeof args.selector === "string"
+              ? args.selector
+              : typeof args.query === "string"
+                ? args.query
+                : typeof args.url === "string"
+                  ? args.url
+                  : "";
           setToolActivity((prev) =>
             [
               ...prev,
@@ -119,8 +128,9 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
                 id: `${call.name}-${Date.now()}-${Math.random()}`,
                 name: call.name,
                 ok: call.ok,
+                detail: detail.slice(0, 80),
               },
-            ].slice(-5)
+            ].slice(-10)
           );
         },
         onError: (err) => {
@@ -204,9 +214,14 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
               {toolActivity.length > 0 ? (
                 <div class="tool-activity">
                   {toolActivity.map((t) => (
-                    <span class="tool-chip" key={t.id} data-ok={String(t.ok)}>
-                      {t.ok ? "✓" : "⚠"} {humanizeTool(t.name)}
-                    </span>
+                    <div class="tool-chip" key={t.id} data-ok={String(t.ok)}>
+                      <span class="tool-chip-head">
+                        {t.ok ? "✓" : "⚠"} {humanizeTool(t.name)}
+                      </span>
+                      {t.detail ? (
+                        <span class="tool-chip-detail">{t.detail}</span>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               ) : null}
