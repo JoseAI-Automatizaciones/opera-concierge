@@ -12,7 +12,17 @@ import {
   scrollToElement,
   readPage,
   navigateTo,
+  interactiveSnapshot,
 } from "./dom";
+
+/** Tools that may have changed the DOM — their results get a fresh
+ *  interactive snapshot appended so the model sees the updated page
+ *  without needing a separate read_page round-trip. */
+const STATE_CHANGING_TOOLS = new Set([
+  "click_element",
+  "fill_field",
+  "navigate_to",
+]);
 
 export type RealtimeToolDef = {
   type: "function";
@@ -149,6 +159,22 @@ export function dispatchTool(name: string, args: unknown): unknown {
       break;
     default:
       result = { ok: false, error: "unknown_tool", tool: name };
+  }
+
+  // For state-changing tools that succeeded, attach a fresh interactive
+  // snapshot so the model's next decision is based on the updated DOM —
+  // critical after filters/sorts/adds that reorder or reveal elements.
+  if (
+    STATE_CHANGING_TOOLS.has(name) &&
+    result &&
+    typeof result === "object" &&
+    (result as { ok?: boolean }).ok === true
+  ) {
+    try {
+      (result as Record<string, unknown>).page_after = interactiveSnapshot();
+    } catch {
+      // Snapshot is best-effort.
+    }
   }
 
   // Diagnostic log — visible in the host page's DevTools console so the

@@ -216,6 +216,7 @@ export function clickElement(args: unknown) {
   if (!isVisible(el)) return { ok: false, error: "not_visible" };
 
   el.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "center" });
+  pulseHighlight(el);
   el.click();
   return { ok: true };
 }
@@ -239,6 +240,7 @@ export function fillField(args: unknown) {
   }
 
   el.focus();
+  pulseHighlight(el);
   const proto =
     el instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
@@ -248,6 +250,49 @@ export function fillField(args: unknown) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   return { ok: true };
+}
+
+/**
+ * Brief outline + glow pulse on the element the agent just acted upon.
+ * Gives the user an immediate visual ack of "yes, the agent did the thing"
+ * — important because the verbal confirmation arrives 1-2s after the
+ * action due to model audio generation latency.
+ *
+ * Implemented as an inline style with a CSS transition that we trigger by
+ * toggling a marker class. The keyframes are injected once into the host
+ * <head> on first use (idempotent), so we don't depend on the host page
+ * shipping any CSS.
+ */
+function pulseHighlight(el: HTMLElement): void {
+  injectHighlightKeyframes();
+  el.classList.remove("opera-concierge-pulse");
+  // Force a reflow so the animation restarts even on rapid repeat fires.
+  void el.offsetWidth;
+  el.classList.add("opera-concierge-pulse");
+  // Clean up the class after the animation so we don't accumulate state.
+  window.setTimeout(() => {
+    el.classList.remove("opera-concierge-pulse");
+  }, 900);
+}
+
+let keyframesInjected = false;
+function injectHighlightKeyframes(): void {
+  if (keyframesInjected) return;
+  keyframesInjected = true;
+  const style = document.createElement("style");
+  style.setAttribute("data-opera-concierge", "highlight");
+  style.textContent = `
+    @keyframes opera-concierge-pulse-kf {
+      0%   { box-shadow: 0 0 0 0 rgba(176, 138, 62, 0.0), 0 0 0 2px rgba(176, 138, 62, 0.0); }
+      20%  { box-shadow: 0 0 0 8px rgba(176, 138, 62, 0.25), 0 0 0 2px rgba(176, 138, 62, 0.9); }
+      100% { box-shadow: 0 0 0 16px rgba(176, 138, 62, 0.0), 0 0 0 2px rgba(176, 138, 62, 0.0); }
+    }
+    .opera-concierge-pulse {
+      animation: opera-concierge-pulse-kf 800ms ease-out forwards;
+      position: relative;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 export function scrollToElement(args: unknown) {
@@ -261,6 +306,26 @@ export function scrollToElement(args: unknown) {
 }
 
 const MAX_INTERACTIVE = 40;
+
+/**
+ * Snapshot of just the interactive elements — used to refresh the model's
+ * view of the page after an action that may have changed it (click on a
+ * filter, add-to-cart, sort, etc.). Lighter than full readPage because we
+ * skip the body text, which doesn't usually change in actionable ways.
+ */
+export function interactiveSnapshot(): Array<Record<string, string>> {
+  const root = document.body;
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll(
+      "button, a[href], [role='button'], [role='link'], input:not([type='hidden']), select, textarea, [data-action], [data-filter], [data-sort], [data-testid]"
+    )
+  )
+    .filter((el) => isVisible(el) && !isProtectedField(el))
+    .filter((el) => !el.closest("opera-concierge-root"))
+    .slice(0, MAX_INTERACTIVE)
+    .map(summarizeInteractive);
+}
 
 export function readPage(args: unknown) {
   if (!isObject(args)) return { ok: false, error: "invalid_args" };

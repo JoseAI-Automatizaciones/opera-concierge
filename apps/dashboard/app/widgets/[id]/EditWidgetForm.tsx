@@ -42,16 +42,17 @@ export function EditWidgetForm({ widget }: { widget: WidgetRowSafe }) {
       </Field>
 
       <Field
-        label="System prompt"
+        label="Agent personality"
         htmlFor="system_prompt"
-        hint="Instructions for the agent. Be directive — tell it to execute actions, not ask. Leave blank for the OpenAI default."
+        hint="WHO the agent is, WHAT your site sells/does, tone, language. Opera's built-in rules already handle when to act vs ask, how to use the DOM tools, product matching, etc. — you only add personality and domain context."
       >
         <textarea
           id="system_prompt"
           name="system_prompt"
-          rows={10}
+          rows={6}
           maxLength={8000}
           defaultValue={widget.system_prompt ?? ""}
+          placeholder={"You are the voice concierge for Café Aurora… (tone, language, domain)"}
           className="opera-input font-mono text-sm"
         />
       </Field>

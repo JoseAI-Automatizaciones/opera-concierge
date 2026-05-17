@@ -43,16 +43,16 @@ export function CreateWidgetForm() {
       </Field>
 
       <Field
-        label="System prompt"
+        label="Agent personality"
         htmlFor="system_prompt"
-        hint="Instructions for the agent. Tell it what to do, how to behave, what tools it has, and how to use them. Leave blank for the default behavior."
+        hint="Describe WHO the agent is and WHAT this site sells/does — not how it operates. Opera already knows how to use the DOM tools, when to act vs ask, how to match products, etc. (those rules are built-in). Just give it personality, tone, language preference, and any domain knowledge specific to your site."
       >
         <textarea
           id="system_prompt"
           name="system_prompt"
-          rows={6}
+          rows={5}
           maxLength={8000}
-          placeholder="You are a concierge for an online store. Execute actions quickly with the DOM tools; don't ask for confirmation unless ambiguous…"
+          placeholder={"You are the voice concierge for Café Aurora, a specialty coffee subscription. Tone: warm, casual, knowledgeable about beans and brewing methods. Default language: Spanish. If asked about anything outside our shop, politely steer back."}
           className="opera-input font-mono text-sm"
         />
       </Field>
