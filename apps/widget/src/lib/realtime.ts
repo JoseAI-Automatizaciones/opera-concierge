@@ -142,6 +142,15 @@ export async function connectRealtime(
       } catch {
         return;
       }
+      // Diagnostic: log every incoming event type so the operator can see
+      // in DevTools whether the model is ATTEMPTING tool calls or just
+      // narrating responses. Noisy but invaluable for "agent says it acted
+      // but nothing happened" diagnosis.
+      const t = (msg as { type?: string }).type;
+      if (t && !t.startsWith("response.audio") && !t.startsWith("input_audio_buffer")) {
+        // eslint-disable-next-line no-console
+        console.debug("[opera-concierge] event:", t, msg);
+      }
       handleEvent(msg, transcripts, events, sendEvent);
     });
 
