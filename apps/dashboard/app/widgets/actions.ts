@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
+import { generateVisitorJwtSecret } from "@/lib/jwt";
 
 const sharedFields = {
   name: z.string().min(1, "Name is required").max(120),
@@ -201,6 +202,31 @@ export async function updateWidget(
   revalidatePath("/widgets");
   revalidatePath(`/widgets/${id}`);
   return { ok: true, message: "Widget updated." };
+}
+
+/** Generate or rotate the visitor JWT signing secret for a widget. Owner-
+ *  scoped and idempotent — calling twice rotates the secret. Use null to
+ *  disable signed mode (sets visitor_jwt_secret to NULL). */
+export async function setVisitorJwtSecret(
+  id: string,
+  mode: "generate" | "rotate" | "disable"
+): Promise<{ ok: boolean; secret?: string; message?: string }> {
+  const user = await requireUser();
+  const supabase = createAdminClient();
+
+  const newSecret = mode === "disable" ? null : generateVisitorJwtSecret();
+
+  const { error } = await supabase
+    .from("widgets")
+    .update({ visitor_jwt_secret: newSecret })
+    .eq("id", id)
+    .eq("owner_user_id", user.id);
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/widgets/${id}`);
+  revalidatePath("/widgets");
+  return { ok: true, secret: newSecret ?? undefined };
 }
 
 export async function deleteWidget(id: string) {

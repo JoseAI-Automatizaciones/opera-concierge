@@ -25,6 +25,14 @@ export type WidgetRow = {
    */
   openai_api_key: string | null;
   /**
+   * HS256 secret for verifying visitor-identity JWTs (Layer 2 signed).
+   * Server-only — never include in PublicWidgetConfig or WidgetRowSafe.
+   * NULL means signed mode is OFF (unsigned data-opera-user-id is
+   * accepted instead). Set means signed mode is the only path —
+   * data-opera-user-id is ignored.
+   */
+  visitor_jwt_secret: string | null;
+  /**
    * auth.users.id of the operator who owns this widget. Populated on
    * insert; the dashboard filters queries by this column so each operator
    * only sees their own widgets. Nullable for back-compat with pre-feature
@@ -66,13 +74,23 @@ export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
  * route is the ONLY place that should read the raw `openai_api_key` column,
  * and that data never escapes the route.
  */
-export type WidgetRowSafe = Omit<WidgetRow, "openai_api_key"> & {
+export type WidgetRowSafe = Omit<WidgetRow, "openai_api_key" | "visitor_jwt_secret"> & {
   has_openai_api_key: boolean;
+  has_visitor_jwt_secret: boolean;
 };
 
 export function toSafeRow(row: WidgetRow): WidgetRowSafe {
-  const { openai_api_key, ...rest } = row;
-  return { ...rest, has_openai_api_key: Boolean(openai_api_key) };
+  // Destructure to strip both server-only secrets; rename the local
+  // shadowed bindings with underscore prefix so eslint doesn't complain
+  // about unused destructured vars.
+  const { openai_api_key: _k, visitor_jwt_secret: _s, ...rest } = row;
+  void _k;
+  void _s;
+  return {
+    ...rest,
+    has_openai_api_key: Boolean(row.openai_api_key),
+    has_visitor_jwt_secret: Boolean(row.visitor_jwt_secret),
+  };
 }
 
 /** Columns to SELECT for any path that leaves the server — excludes the key. */

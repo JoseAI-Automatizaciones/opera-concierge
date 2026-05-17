@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
 import { toSafeRow, type WidgetRow } from "@/lib/supabase/types";
 import { EditWidgetForm } from "./EditWidgetForm";
+import { VisitorJwtPanel } from "./VisitorJwtPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,8 @@ export default async function EditWidgetPage({
 
   if (!data) notFound();
   const widget = toSafeRow(data);
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://your-deploy.vercel.app";
 
   return (
     <div className="relative flex flex-1 flex-col">
@@ -72,6 +75,12 @@ export default async function EditWidgetPage({
         </div>
 
         <EditWidgetForm widget={widget} />
+
+        <VisitorJwtPanel
+          widgetId={widget.id}
+          hasSecret={widget.has_visitor_jwt_secret}
+          appUrl={appUrl}
+        />
       </main>
     </div>
   );

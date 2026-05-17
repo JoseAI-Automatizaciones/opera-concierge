@@ -10,18 +10,22 @@ export type ScriptConfig = {
   widgetId: string;
   apiOrigin: string;
   /**
-   * Operator-asserted visitor identity (Layer 2 — unsigned mode). The
-   * host site declares "this visitor is user X" via
+   * Operator-asserted visitor identity (Layer 2 unsigned). The host site
+   * declares "this visitor is user X" via
    *   <script ... data-opera-user-id="user_123" defer></script>
-   * We trust the operator's frontend declaration in unsigned mode; quotas
-   * bucket by `user:<id>` instead of `ip:<addr>` when present, so a single
-   * visitor across IPs / devices gets a coherent rate-limit budget.
-   *
-   * If the operator wants the assertion to be unforgeable (a visitor
-   * couldn't lie about their identity by editing the script tag), use the
-   * signed-JWT mode — a separate option set in the dashboard.
+   * Quotas bucket by `user:<id>` instead of `ip:<addr>` when present.
+   * Ignored when the widget is configured for JWT-signed mode.
    */
   visitorId?: string;
+  /**
+   * Operator-issued JWT carrying visitor identity (Layer 2 signed). When
+   * the widget is configured with a JWT secret in the dashboard, the host
+   * site must serve a server-signed JWT via:
+   *   <script ... data-opera-user-token="eyJhbGc..." defer></script>
+   * The backend verifies it against the widget's secret; the `sub` claim
+   * becomes the visitor ID. Unforgeable by the visitor.
+   */
+  visitorToken?: string;
 };
 
 /** Tight allowlist for visitor IDs: alphanum and a few safe separators.
@@ -76,7 +80,22 @@ export function readScriptConfig(): ScriptConfig {
     }
   }
 
-  return { widgetId, apiOrigin, visitorId };
+  const rawToken = tag.dataset.operaUserToken?.trim();
+  let visitorToken: string | undefined;
+  if (rawToken) {
+    // Light shape check — three base64url segments separated by dots.
+    // Heavy verification is server-side.
+    if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(rawToken) && rawToken.length <= 2048) {
+      visitorToken = rawToken;
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "Opera Concierge: data-opera-user-token format invalid (expected three base64url segments separated by dots, max 2048 chars)."
+      );
+    }
+  }
+
+  return { widgetId, apiOrigin, visitorId, visitorToken };
 }
 
 export { ScriptConfigError };

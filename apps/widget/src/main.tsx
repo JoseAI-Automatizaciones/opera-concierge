@@ -56,6 +56,7 @@ function boot() {
       widgetId={cfg.widgetId}
       apiOrigin={cfg.apiOrigin}
       visitorId={cfg.visitorId}
+      visitorToken={cfg.visitorToken}
       shadowHost={host}
     />,
     mount

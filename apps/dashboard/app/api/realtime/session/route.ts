@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import type { WidgetRow } from "@/lib/supabase/types";
 import { corsHeaders, SENTINEL_ID, uniformNotFound } from "@/lib/api/cors";
 import { bucketKeyFromRequest, consumeQuota } from "@/lib/quotas";
+import { verifyVisitorJwt } from "@/lib/jwt";
 
 /**
  * POST /api/realtime/session
@@ -32,6 +33,15 @@ const bodySchema = z.object({
   visitor_id: z
     .string()
     .regex(VISITOR_ID_PATTERN, "invalid_visitor_id")
+    .optional(),
+  /** HS256 JWT issued by the operator's backend (Layer 2 signed mode).
+   *  Three base64url segments separated by dots. We bound the length to
+   *  guard against absurd payloads — real visitor-identity JWTs are
+   *  comfortably under 1 KB. */
+  visitor_token: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, "invalid_visitor_token")
+    .max(2048)
     .optional(),
 });
 
@@ -118,18 +128,36 @@ export async function POST(req: Request) {
     return uniformNotFound(origin);
   }
 
-  // Quota check. The unsigned visitor_id is forgeable — an attacker on an
-  // allowed origin can edit it in DevTools and cycle through random IDs to
-  // bypass per-user caps. So when visitor_id is present we charge BOTH
-  // buckets (ip:<addr> AND user:<id>) atomically: consume_dual_quota peeks
-  // both, allows only if BOTH would stay under cap, and increments NEITHER
-  // when either would fail. This prevents:
-  //   - Rotation attacks: each fake user_id still hits the shared IP cap.
-  //   - Cross-bucket cascade: a user at their cap retrying doesn't burn
-  //     the shared IP bucket (no increment when over limit). Equally, a
-  //     visitor on a NAT whose IP is exhausted doesn't burn their personal
-  //     user-bucket on requests that never minted a session.
-  const visitorId = parsed.success ? parsed.data.visitor_id ?? null : null;
+  // Resolve visitor identity. Two layers:
+  //   1. Signed mode (preferred when configured): the widget row has a
+  //      visitor_jwt_secret, and the request body carries a JWT that
+  //      verifies against it. The JWT's `sub` claim becomes the visitor.
+  //      data-opera-user-id is IGNORED in this mode — once signing is
+  //      enabled the operator's explicit intent is "only trust JWTs".
+  //   2. Unsigned fallback: no JWT secret on the widget → accept the
+  //      raw visitor_id from the body if present.
+  //
+  // If signed mode is configured but the JWT is missing or invalid, we
+  // collapse to the uniform 404 to avoid leaking "this widget requires
+  // JWT" as a side channel. Operators see the failure in their browser
+  // console + can verify with the integration sample code.
+  let visitorId: string | null = null;
+  if (parsed.success) {
+    if (data.visitor_jwt_secret) {
+      const token = parsed.data.visitor_token;
+      if (!token) return uniformNotFound(origin);
+      const result = await verifyVisitorJwt(token, data.visitor_jwt_secret);
+      if (!result.ok) return uniformNotFound(origin);
+      visitorId = result.sub;
+    } else if (parsed.data.visitor_id) {
+      visitorId = parsed.data.visitor_id;
+    }
+  }
+
+  // Quota check. Charge BOTH ip:<addr> AND user:<id> when visitor_id is
+  // present. consume_dual_quota peeks both atomically and increments
+  // NEITHER when either would fail — prevents rotation attacks AND
+  // cross-bucket cascade burns. See migration 20260517000001.
   const quota = await consumeQuota({
     widgetId: data.id,
     primaryBucket: bucketKeyFromRequest(req),

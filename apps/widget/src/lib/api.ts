@@ -31,11 +31,15 @@ export class RateLimitedError extends Error {
 export async function mintRealtimeSession(
   apiOrigin: string,
   widgetId: string,
-  visitorId?: string
+  identity?: { visitorId?: string; visitorToken?: string }
 ): Promise<RealtimeSession> {
   const url = `${apiOrigin}/api/realtime/session`;
   const body: Record<string, string> = { widget_id: widgetId };
-  if (visitorId) body.visitor_id = visitorId;
+  // Token wins over raw ID — if the widget is configured for signed mode,
+  // sending both wouldn't change the backend's behavior (token is checked
+  // first), but it's cleaner not to attach a value we know will be ignored.
+  if (identity?.visitorToken) body.visitor_token = identity.visitorToken;
+  else if (identity?.visitorId) body.visitor_id = identity.visitorId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "omit",
