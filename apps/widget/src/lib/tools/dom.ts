@@ -202,6 +202,8 @@ export function scrollToElement(args: unknown) {
   return { ok: true };
 }
 
+const MAX_INTERACTIVE = 40;
+
 export function readPage(args: unknown) {
   if (!isObject(args)) return { ok: false, error: "invalid_args" };
   const cap = Math.min(
@@ -221,19 +223,66 @@ export function readPage(args: unknown) {
     .querySelectorAll(PROTECTED_SELECTOR + ", opera-concierge-root")
     .forEach((node) => node.remove());
 
-  // Cloned nodes aren't in the live document so innerText falls back to
-  // textContent in some browsers; that's fine for our purposes.
   const raw =
     (clone instanceof HTMLElement && clone.innerText) ||
     clone.textContent ||
     "";
+
+  // Build a compact map of interactive elements with selectors, so the agent
+  // can act in ONE round-trip instead of read_page → find_elements → click.
+  // We work on the live document (not the clone) because we need real
+  // selectors that resolve back to the actuating elements.
+  const liveRoot = selector ? document.querySelector(selector) : document.body;
+  const interactiveSet = liveRoot
+    ? Array.from(
+        liveRoot.querySelectorAll(
+          "button, a[href], [role='button'], [role='link'], input:not([type='hidden']), select, textarea, [data-action], [data-filter], [data-sort], [data-testid]"
+        )
+      )
+        .filter((el) => isVisible(el) && !isProtectedField(el))
+        .filter((el) => !el.closest("opera-concierge-root"))
+        .slice(0, MAX_INTERACTIVE)
+        .map(summarizeInteractive)
+    : [];
 
   return {
     ok: true,
     title: document.title,
     url: location.href,
     text: raw.replace(/\s+/g, " ").trim().slice(0, cap),
+    interactive: interactiveSet,
   };
+}
+
+/**
+ * Compact descriptor for an actionable element — enough for the model to
+ * pick the right selector without a second tool call.
+ */
+function summarizeInteractive(el: Element) {
+  const tag = el.tagName.toLowerCase();
+  const text = ((el as HTMLElement).innerText ?? el.textContent ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  const out: Record<string, string> = {
+    tag,
+    selector: buildSelector(el),
+  };
+  if (text) out.text = text;
+  const aria = el.getAttribute("aria-label");
+  if (aria) out.aria = aria.slice(0, 80);
+  // Surface dataset attributes commonly used as action hooks so the model
+  // sees "this button adds product p3" rather than just "Add to cart".
+  for (const attr of ["data-action", "data-product-id", "data-filter", "data-sort", "data-testid"]) {
+    const v = el.getAttribute(attr);
+    if (v) out[attr] = v.slice(0, 60);
+  }
+  if (el instanceof HTMLInputElement) {
+    if (el.placeholder) out.placeholder = el.placeholder.slice(0, 60);
+    if (el.name) out.name = el.name;
+    out.input_type = el.type;
+  }
+  return out;
 }
 
 export function navigateTo(args: unknown) {

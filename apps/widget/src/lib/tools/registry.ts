@@ -90,7 +90,7 @@ export const toolDefinitions: RealtimeToolDef[] = [
     type: "function",
     name: "read_page",
     description:
-      "Read the visible text from the page or a specific region. Use this to understand what the user is looking at before deciding what to do.",
+      "Read the page in ONE call: returns visible text PLUS a structured list of interactive elements (buttons, links, inputs, anything with data-action/data-product-id/data-filter/data-sort) each with its CSS selector. Use this once at the start of a session to learn what's on the page, then call click_element / fill_field directly with the selectors returned here — DO NOT call find_elements again unless read_page didn't include what you need.",
     parameters: {
       type: "object",
       properties: {

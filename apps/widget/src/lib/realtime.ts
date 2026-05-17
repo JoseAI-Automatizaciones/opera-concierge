@@ -279,10 +279,15 @@ function handleEvent(
     }
 
     case "error": {
-      events.onError(
-        new Error(String((m as { message?: string }).message ?? "Realtime error"))
-      );
-      events.onStatus("error");
+      // OpenAI sends non-fatal `error` events for things like transcription
+      // failures or rate-limit warnings. The peer connection is still live
+      // and audio keeps flowing, so we surface the message but DO NOT flip
+      // the widget status — connection-state change is the source of truth
+      // for "is this session actually dead".
+      const detail = (m as { error?: { message?: string }; message?: string });
+      const msg =
+        detail.error?.message ?? detail.message ?? "Realtime error";
+      events.onError(new Error(String(msg)));
       break;
     }
     default:
