@@ -19,6 +19,83 @@
 const MAX_RESULTS = 8;
 const MAX_TEXT_LENGTH = 2000;
 
+/**
+ * Integer-ref scheme (inspired by browser-use & vercel-labs/agent-browser).
+ *
+ * Instead of sending CSS selectors to the LLM, we hand it short integer
+ * handles like "e12". The widget keeps a Map<ref, Element> internally and
+ * resolves the handle back to the live DOM node when the model calls a
+ * tool. Three wins:
+ *   - ~50% fewer tokens in the page snapshot (selectors are verbose).
+ *   - Voice models stop hallucinating selector syntax.
+ *   - Re-renders that detach the node fall back to the stable CSS selector
+ *     we cached at assignment time.
+ *
+ * Refs are monotonic across the session (e1, e2, … never reused) so that
+ * a previously-issued ref stays valid even after a fresh snapshot. We cap
+ * map growth at MAX_REF_MAP_SIZE by evicting the oldest entries.
+ */
+const MAX_REF_MAP_SIZE = 500;
+
+type RefEntry = {
+  /** WeakRef so we don't pin removed DOM nodes in memory. */
+  weak: WeakRef<HTMLElement>;
+  /** Fallback selector cached at assignment time — used if the WeakRef
+   *  is dead OR the node was detached/re-rendered by the host. */
+  selector: string;
+};
+
+const refMap = new Map<string, RefEntry>();
+let refCounter = 0;
+
+function assignRef(el: HTMLElement): string {
+  refCounter += 1;
+  const id = `e${refCounter}`;
+  refMap.set(id, { weak: new WeakRef(el), selector: buildSelector(el) });
+  // Evict oldest entries when over cap. Map iteration order is insertion
+  // order, so .keys().next().value is the oldest.
+  while (refMap.size > MAX_REF_MAP_SIZE) {
+    const oldest = refMap.keys().next().value;
+    if (!oldest) break;
+    refMap.delete(oldest);
+  }
+  return id;
+}
+
+/** Resolve an LLM-supplied ref back to a live element. Returns null if
+ *  the ref was never issued, the element is gone, AND the cached
+ *  selector no longer resolves uniquely. */
+function resolveRef(ref: string): HTMLElement | null {
+  const entry = refMap.get(ref);
+  if (!entry) return null;
+  const live = entry.weak.deref();
+  if (live && document.contains(live)) return live;
+  // Node was detached or GC'd — try the cached CSS selector as a fallback.
+  const fallback = resolveSingle(entry.selector);
+  if (fallback) {
+    // Re-cache so we don't keep doing the re-query.
+    refMap.set(ref, { weak: new WeakRef(fallback), selector: entry.selector });
+    return fallback;
+  }
+  return null;
+}
+
+/** Resolve a tool's target element from either a ref (preferred) or a
+ *  raw CSS selector (fallback for callers who didn't get a ref). Returns
+ *  the element + the input shape used for error reporting. */
+function resolveTarget(args: Record<string, unknown>): {
+  el: HTMLElement | null;
+  via: "ref" | "selector" | "none";
+} {
+  if (typeof args.ref === "string" && args.ref) {
+    return { el: resolveRef(args.ref), via: "ref" };
+  }
+  if (typeof args.selector === "string") {
+    return { el: resolveSingle(args.selector), via: "selector" };
+  }
+  return { el: null, via: "none" };
+}
+
 /** Selectors that match any field we treat as protected. */
 const PROTECTED_SELECTOR = [
   "input[type='password']",
@@ -226,10 +303,9 @@ export function findElements(args: unknown) {
 }
 
 export function clickElement(args: unknown) {
-  if (!isObject(args) || typeof args.selector !== "string") {
-    return { ok: false, error: "invalid_args" };
-  }
-  const el = resolveSingle(args.selector);
+  if (!isObject(args)) return { ok: false, error: "invalid_args" };
+  const { el, via } = resolveTarget(args);
+  if (via === "none") return { ok: false, error: "missing_ref_or_selector" };
   if (!el) return { ok: false, error: "not_found_or_ambiguous" };
   if (!isVisible(el)) return { ok: false, error: "not_visible" };
   if (isInsideProtectedContext(el)) return { ok: false, error: "protected_context" };
@@ -241,14 +317,11 @@ export function clickElement(args: unknown) {
 }
 
 export function fillField(args: unknown) {
-  if (
-    !isObject(args) ||
-    typeof args.selector !== "string" ||
-    typeof args.value !== "string"
-  ) {
+  if (!isObject(args) || typeof args.value !== "string") {
     return { ok: false, error: "invalid_args" };
   }
-  const el = resolveSingle(args.selector);
+  const { el, via } = resolveTarget(args);
+  if (via === "none") return { ok: false, error: "missing_ref_or_selector" };
   if (!el) return { ok: false, error: "not_found_or_ambiguous" };
   if (isInsideProtectedContext(el)) return { ok: false, error: "protected_field" };
   if (
@@ -315,10 +388,9 @@ function injectHighlightKeyframes(): void {
 }
 
 export function scrollToElement(args: unknown) {
-  if (!isObject(args) || typeof args.selector !== "string") {
-    return { ok: false, error: "invalid_args" };
-  }
-  const el = resolveSingle(args.selector);
+  if (!isObject(args)) return { ok: false, error: "invalid_args" };
+  const { el, via } = resolveTarget(args);
+  if (via === "none") return { ok: false, error: "missing_ref_or_selector" };
   if (!el) return { ok: false, error: "not_found_or_ambiguous" };
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   return { ok: true };
@@ -426,8 +498,11 @@ function summarizeInteractive(el: Element) {
     .replace(/\s+/g, " ")
     .trim();
   const out: Record<string, string> = {
+    // Integer ref — what the LLM uses for tool calls. CSS selector is
+    // intentionally NOT included in the LLM-facing payload (would defeat
+    // the token savings); it's cached internally in refMap for resolution.
+    ref: assignRef(el as HTMLElement),
     tag,
-    selector: buildSelector(el),
   };
   if (ownText) out.text = ownText.slice(0, 80);
   const aria = el.getAttribute("aria-label");

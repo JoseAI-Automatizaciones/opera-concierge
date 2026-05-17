@@ -52,14 +52,14 @@ export const toolDefinitions: RealtimeToolDef[] = [
     type: "function",
     name: "find_elements",
     description:
-      "Search the visible page for elements matching a CSS selector OR a piece of visible text. Returns up to 8 matches with tag, visible text snippet, and a stable selector you can use with other tools.",
+      "Search the visible page for elements matching either a piece of visible text OR a CSS selector. Returns up to 8 matches as ref handles (e.g. 'e42') with tag and visible text snippet. Use the ref in click_element/fill_field/scroll_to_element. Usually not needed — the PAGE_SNAPSHOT already lists every interactive element.",
     parameters: {
       type: "object",
       properties: {
         query: {
           type: "string",
           description:
-            "Either a CSS selector (e.g. 'button.checkout') or a substring of visible text (e.g. 'Add to cart').",
+            "Either a substring of visible text (e.g. 'Add to cart') or a CSS selector (e.g. 'button.checkout').",
         },
         limit: {
           type: "integer",
@@ -73,39 +73,40 @@ export const toolDefinitions: RealtimeToolDef[] = [
     type: "function",
     name: "click_element",
     description:
-      "Click an element identified by a CSS selector returned from find_elements.",
+      "Click an element. Prefer the `ref` form using a handle from PAGE_SNAPSHOT or page_after (e.g. 'e12'). CSS selectors are accepted as a fallback when no ref is available.",
     parameters: {
       type: "object",
       properties: {
-        selector: { type: "string", description: "Stable CSS selector." },
+        ref: { type: "string", description: "Ref handle from the snapshot, e.g. 'e12'." },
+        selector: { type: "string", description: "CSS selector — only when no ref is available." },
       },
-      required: ["selector"],
     },
   },
   {
     type: "function",
     name: "fill_field",
     description:
-      "Fill a text input or textarea with a value. Password and credit-card fields are refused for safety.",
+      "Fill a text input or textarea with a value. Prefer the `ref` form using a handle from the snapshot. Password and credit-card fields are refused for safety.",
     parameters: {
       type: "object",
       properties: {
-        selector: { type: "string", description: "Stable CSS selector of the input." },
+        ref: { type: "string", description: "Ref handle from the snapshot, e.g. 'e12'." },
+        selector: { type: "string", description: "CSS selector — only when no ref is available." },
         value: { type: "string", description: "Value to enter." },
       },
-      required: ["selector", "value"],
+      required: ["value"],
     },
   },
   {
     type: "function",
     name: "scroll_to_element",
-    description: "Smoothly scroll the page so the given element is centered in the viewport.",
+    description: "Smoothly scroll the page so the given element is centered in the viewport. Prefer the `ref` form.",
     parameters: {
       type: "object",
       properties: {
-        selector: { type: "string", description: "Stable CSS selector." },
+        ref: { type: "string", description: "Ref handle from the snapshot, e.g. 'e12'." },
+        selector: { type: "string", description: "CSS selector — only when no ref is available." },
       },
-      required: ["selector"],
     },
   },
   {
@@ -154,22 +155,22 @@ export async function dispatchTool(name: string, args: unknown): Promise<unknown
   let result: unknown;
   switch (name) {
     case "find_elements":
-      result = findElements(a as { query: string; limit?: number });
+      result = findElements(a);
       break;
     case "click_element":
-      result = clickElement(a as { selector: string });
+      result = clickElement(a);
       break;
     case "fill_field":
-      result = fillField(a as { selector: string; value: string });
+      result = fillField(a);
       break;
     case "scroll_to_element":
-      result = scrollToElement(a as { selector: string });
+      result = scrollToElement(a);
       break;
     case "read_page":
-      result = readPage(a as { selector?: string; max_chars?: number });
+      result = readPage(a);
       break;
     case "navigate_to":
-      result = navigateTo(a as { url: string });
+      result = navigateTo(a);
       break;
     default:
       result = { ok: false, error: "unknown_tool", tool: name };

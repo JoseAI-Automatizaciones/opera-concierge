@@ -114,13 +114,15 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
           if (!aliveRef.current) return;
           const args = (call.args ?? {}) as Record<string, unknown>;
           const detail =
-            typeof args.selector === "string"
-              ? args.selector
-              : typeof args.query === "string"
-                ? args.query
-                : typeof args.url === "string"
-                  ? args.url
-                  : "";
+            typeof args.ref === "string"
+              ? args.ref
+              : typeof args.selector === "string"
+                ? args.selector
+                : typeof args.query === "string"
+                  ? args.query
+                  : typeof args.url === "string"
+                    ? args.url
+                    : "";
           setToolActivity((prev) =>
             [
               ...prev,
