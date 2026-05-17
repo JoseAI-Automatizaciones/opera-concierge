@@ -12,7 +12,7 @@ import {
   scrollToElement,
   readPage,
   navigateTo,
-  interactiveSnapshot,
+  interactiveSnapshotDiff,
 } from "./dom";
 
 /** Tools that may have changed the DOM in-place — their results get a
@@ -177,9 +177,11 @@ export async function dispatchTool(name: string, args: unknown): Promise<unknown
   }
 
   // For state-changing tools that succeeded, wait one paint cycle for the
-  // host page's framework to commit its DOM update, THEN snapshot. Without
-  // the wait, on React/Vue/etc. the snapshot is the pre-update DOM and
-  // the model's next decision uses stale selectors.
+  // host page's framework to commit its DOM update, THEN compute a DIFF
+  // against the model's previous view of the page. The diff (added /
+  // removed / changed / unchanged_count) is much smaller than a fresh
+  // full snapshot when the page only mutated a little (which is the
+  // common case after a filter or a single add-to-cart click).
   if (
     STATE_CHANGING_TOOLS.has(name) &&
     result &&
@@ -188,7 +190,7 @@ export async function dispatchTool(name: string, args: unknown): Promise<unknown
   ) {
     try {
       await waitForPaint();
-      (result as Record<string, unknown>).page_after = interactiveSnapshot();
+      (result as Record<string, unknown>).page_after = interactiveSnapshotDiff();
     } catch {
       // Snapshot is best-effort.
     }

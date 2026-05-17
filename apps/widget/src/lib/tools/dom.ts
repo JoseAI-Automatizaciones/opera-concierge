@@ -46,12 +46,19 @@ type RefEntry = {
 };
 
 const refMap = new Map<string, RefEntry>();
+/** Reverse lookup: live Element → its ref. Lets us re-use refs across
+ *  re-snapshots so the model can correctly receive a diff like
+ *  `removed: ["e7"]` when the SAME element keeps the SAME ref across
+ *  snapshots. Without this, every rebuild assigned fresh refs and the
+ *  diff would always be "everything removed, everything added". */
+const elementToRef = new WeakMap<Element, string>();
 let refCounter = 0;
 
 function assignRef(el: HTMLElement): string {
   refCounter += 1;
   const id = `e${refCounter}`;
   refMap.set(id, { weak: new WeakRef(el), selector: buildSelector(el) });
+  elementToRef.set(el, id);
   // Evict oldest entries when over cap. Map iteration order is insertion
   // order, so .keys().next().value is the oldest.
   while (refMap.size > MAX_REF_MAP_SIZE) {
@@ -60,6 +67,22 @@ function assignRef(el: HTMLElement): string {
     refMap.delete(oldest);
   }
   return id;
+}
+
+/** Get the element's existing ref if it has one and that ref is still
+ *  alive in refMap; otherwise mint a new ref. Used by the snapshot
+ *  builders so the SAME element keeps the SAME ref across re-snapshots. */
+function getOrAssignRef(el: HTMLElement): string {
+  const existing = elementToRef.get(el);
+  if (existing && refMap.has(existing)) {
+    // Refresh the WeakRef in case GC was about to claim it.
+    const entry = refMap.get(existing)!;
+    if (!entry.weak.deref()) {
+      refMap.set(existing, { weak: new WeakRef(el), selector: entry.selector });
+    }
+    return existing;
+  }
+  return assignRef(el);
 }
 
 /** Resolve an LLM-supplied ref back to a live element. Returns null if
@@ -399,23 +422,139 @@ export function scrollToElement(args: unknown) {
 const MAX_INTERACTIVE = 40;
 
 /**
- * Snapshot of just the interactive elements — used to refresh the model's
- * view of the page after an action that may have changed it (click on a
- * filter, add-to-cart, sort, etc.). Lighter than full readPage because we
- * skip the body text, which doesn't usually change in actionable ways.
+ * Single broad query for "interactive" elements. Three buckets:
+ *  - Native interactive tags: button, a[href], input, select, textarea
+ *  - ARIA-role hooks: role=button / link / menuitem / option / checkbox / tab
+ *  - Custom-attribute hooks: data-action / data-filter / data-sort / data-testid
+ *    / data-product-id / data-id, plus inline onclick or focusable
+ *    tabindex (modern SPAs put behavior on <div onClick>).
+ *
+ * Worth noting: we intentionally do NOT scan cursor:pointer via
+ * getComputedStyle. That would force a layout pass over the entire
+ * document, which on big product pages takes 100-300ms. The patterns
+ * above cover ~95% of real-world clickables.
  */
-export function interactiveSnapshot(): Array<Record<string, string>> {
+const INTERACTIVE_SELECTOR = [
+  "button",
+  "a[href]",
+  "input:not([type='hidden'])",
+  "select",
+  "textarea",
+  "[role='button']",
+  "[role='link']",
+  "[role='menuitem']",
+  "[role='option']",
+  "[role='checkbox']",
+  "[role='switch']",
+  "[role='tab']",
+  "[role='radio']",
+  "[data-action]",
+  "[data-filter]",
+  "[data-sort]",
+  "[data-testid]",
+  "[data-product-id]",
+  "[data-id]",
+  "[onclick]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+/** Build the raw interactive-element list. Does not record state. */
+function buildInteractive(): Array<Record<string, string>> {
   const root = document.body;
   if (!root) return [];
-  return Array.from(
-    root.querySelectorAll(
-      "button, a[href], [role='button'], [role='link'], input:not([type='hidden']), select, textarea, [data-action], [data-filter], [data-sort], [data-testid]"
-    )
-  )
+  return Array.from(root.querySelectorAll(INTERACTIVE_SELECTOR))
     .filter((el) => isVisible(el) && !isInsideProtectedContext(el))
     .filter((el) => !el.closest("opera-concierge-root"))
     .slice(0, MAX_INTERACTIVE)
     .map(summarizeInteractive);
+}
+
+/**
+ * Cache of the most recent snapshot's signatures, keyed by ref. Used by
+ * interactiveSnapshotDiff to compute the delta against the previous view
+ * the model has. Reset whenever a fresh full snapshot is recorded.
+ */
+let lastSnapshot = new Map<string, string>();
+
+function signature(item: Record<string, string>): string {
+  return JSON.stringify(item);
+}
+
+function recordSnapshot(items: Array<Record<string, string>>): void {
+  lastSnapshot = new Map(items.map((it) => [it.ref, signature(it)]));
+}
+
+/**
+ * Full snapshot — returns every visible interactive element. Records the
+ * state internally so the next interactiveSnapshotDiff() can compute its
+ * delta against this view. Called from readPage and the initial widget
+ * snapshot injection.
+ */
+export function interactiveSnapshot(): Array<Record<string, string>> {
+  const items = buildInteractive();
+  recordSnapshot(items);
+  return items;
+}
+
+/**
+ * Delta snapshot — what changed since the model last saw the page.
+ *   added:   refs that appeared (full element entries)
+ *   removed: refs that disappeared (just the ref strings)
+ *   changed: refs whose properties changed (full new element entries)
+ *   unchanged_count: how many refs stayed identical (count only)
+ *   total:   total interactive items currently on the page
+ *
+ * After computing, lastSnapshot is updated to the current state so the
+ * next call diffs against THIS state, not the original. If churn is high
+ * (>60% of refs changed/added/removed), callers may prefer to ignore the
+ * diff and re-request a full read_page, but in practice the diff format
+ * handles full reloads fine — every old ref ends up in `removed`, every
+ * new one in `added`.
+ */
+export type InteractiveDiff = {
+  added: Array<Record<string, string>>;
+  removed: string[];
+  changed: Array<Record<string, string>>;
+  unchanged_count: number;
+  total: number;
+};
+
+export function interactiveSnapshotDiff(): InteractiveDiff {
+  const items = buildInteractive();
+  const newByRef = new Map<string, Record<string, string>>();
+  const newSigs = new Map<string, string>();
+  for (const it of items) {
+    newByRef.set(it.ref, it);
+    newSigs.set(it.ref, signature(it));
+  }
+
+  const added: Array<Record<string, string>> = [];
+  const changed: Array<Record<string, string>> = [];
+  let unchanged = 0;
+  for (const [ref, sig] of newSigs) {
+    const prev = lastSnapshot.get(ref);
+    if (prev === undefined) {
+      added.push(newByRef.get(ref)!);
+    } else if (prev !== sig) {
+      changed.push(newByRef.get(ref)!);
+    } else {
+      unchanged += 1;
+    }
+  }
+  const removed: string[] = [];
+  for (const ref of lastSnapshot.keys()) {
+    if (!newSigs.has(ref)) removed.push(ref);
+  }
+
+  lastSnapshot = newSigs;
+
+  return {
+    added,
+    removed,
+    changed,
+    unchanged_count: unchanged,
+    total: items.length,
+  };
 }
 
 export function readPage(args: unknown) {
@@ -455,22 +594,11 @@ export function readPage(args: unknown) {
     clone.textContent ||
     "";
 
-  // Build a compact map of interactive elements with selectors, so the agent
-  // can act in ONE round-trip instead of read_page → find_elements → click.
-  // We work on the live document (not the clone) because we need real
-  // selectors that resolve back to the actuating elements.
-  const liveRoot = selector ? document.querySelector(selector) : document.body;
-  const interactiveSet = liveRoot
-    ? Array.from(
-        liveRoot.querySelectorAll(
-          "button, a[href], [role='button'], [role='link'], input:not([type='hidden']), select, textarea, [data-action], [data-filter], [data-sort], [data-testid]"
-        )
-      )
-        .filter((el) => isVisible(el) && !isProtectedField(el))
-        .filter((el) => !el.closest("opera-concierge-root"))
-        .slice(0, MAX_INTERACTIVE)
-        .map(summarizeInteractive)
-    : [];
+  // Build a compact map of interactive elements with refs, so the agent
+  // can act in ONE round-trip. Working on the live document — we need
+  // real elements that resolve back via refMap. Also records the state
+  // into lastSnapshot so the next page_after diffs against this.
+  const interactiveSet = interactiveSnapshot();
 
   return {
     ok: true,
@@ -501,7 +629,9 @@ function summarizeInteractive(el: Element) {
     // Integer ref — what the LLM uses for tool calls. CSS selector is
     // intentionally NOT included in the LLM-facing payload (would defeat
     // the token savings); it's cached internally in refMap for resolution.
-    ref: assignRef(el as HTMLElement),
+    // getOrAssignRef reuses existing refs across snapshots so element
+    // identity is preserved (lets us emit minimal diffs in page_after).
+    ref: getOrAssignRef(el as HTMLElement),
     tag,
   };
   if (ownText) out.text = ownText.slice(0, 80);
@@ -511,10 +641,62 @@ function summarizeInteractive(el: Element) {
     const v = el.getAttribute(attr);
     if (v) out[attr] = v.slice(0, 60);
   }
+  // Input metadata: surface the validation hints the page already declares,
+  // so the agent doesn't waste a turn typing garbage and getting silently
+  // rejected. Pattern / minlength / maxlength / inputmode / required tell
+  // the model what shape of value the field will actually accept.
   if (el instanceof HTMLInputElement) {
     if (el.placeholder) out.placeholder = el.placeholder.slice(0, 60);
     if (el.name) out.name = el.name;
     out.input_type = el.type;
+    if (el.required) out.required = "true";
+    const pattern = el.getAttribute("pattern");
+    if (pattern) out.pattern = pattern.slice(0, 80);
+    const minlength = el.getAttribute("minlength");
+    if (minlength) out.minlength = minlength;
+    const maxlength = el.getAttribute("maxlength");
+    if (maxlength) out.maxlength = maxlength;
+    const inputmode = el.getAttribute("inputmode");
+    if (inputmode) out.inputmode = inputmode;
+    if (el.type === "number" || el.type === "range") {
+      if (el.min) out.min = el.min;
+      if (el.max) out.max = el.max;
+      if (el.step) out.step = el.step;
+    }
+    if (el.type === "file" && el.accept) out.accept = el.accept.slice(0, 80);
+    if (el.disabled) out.disabled = "true";
+    if (el.checked && (el.type === "checkbox" || el.type === "radio")) {
+      out.checked = "true";
+    }
+  } else if (el instanceof HTMLTextAreaElement) {
+    if (el.placeholder) out.placeholder = el.placeholder.slice(0, 60);
+    if (el.name) out.name = el.name;
+    if (el.required) out.required = "true";
+    const maxlength = el.getAttribute("maxlength");
+    if (maxlength) out.maxlength = maxlength;
+    if (el.disabled) out.disabled = "true";
+  } else if (el instanceof HTMLSelectElement) {
+    if (el.name) out.name = el.name;
+    if (el.disabled) out.disabled = "true";
+    if (el.required) out.required = "true";
+    const options = Array.from(el.options);
+    out.options_count = String(options.length);
+    // Inline the first 4 option labels so the agent can speak them aloud
+    // without an extra read_page round-trip.
+    const preview = options
+      .slice(0, 4)
+      .map((o) => o.textContent?.trim().slice(0, 40) ?? "")
+      .filter(Boolean)
+      .join(" | ");
+    if (preview) out.options_preview = preview;
+    if (el.selectedIndex >= 0 && el.options[el.selectedIndex]) {
+      const sel = el.options[el.selectedIndex].textContent?.trim() ?? "";
+      if (sel) out.selected = sel.slice(0, 40);
+    }
+  } else if (el instanceof HTMLButtonElement) {
+    if (el.disabled) out.disabled = "true";
+  } else if (el instanceof HTMLAnchorElement) {
+    if (el.href) out.href = el.href.slice(0, 120);
   }
 
   // Walk up to find a meaningful container: an element that is a semantic

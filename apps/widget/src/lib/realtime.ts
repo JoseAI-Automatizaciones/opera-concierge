@@ -139,7 +139,7 @@ export async function connectRealtime(
                 {
                   type: "input_text",
                   text:
-                    "[INTERNAL PAGE CONTEXT — not spoken by the user, do not respond to it. Each interactive item has a 'ref' handle like 'e12' — pass that as {\"ref\":\"e12\"} to click_element / fill_field / scroll_to_element. The 'context' field has the surrounding card's text (product name, price) for matching user requests to the right ref. Do NOT call read_page again — every successful tool call returns a fresh 'page_after' with updated refs.]\n" +
+                    "[INTERNAL PAGE CONTEXT — not spoken by the user, do not respond to it. Each interactive item has a 'ref' handle like 'e12' — pass that as {\"ref\":\"e12\"} to click_element / fill_field / scroll_to_element. The 'context' field has the surrounding card's text (product name, price). Input items include validation hints (pattern, maxlength, inputmode, etc.) and selects include options_preview. Do NOT call read_page again — every successful tool call returns 'page_after' as a DELTA (added/removed/changed/unchanged_count) so you know exactly what shifted.]\n" +
                     JSON.stringify(snapshot, null, 0).slice(0, 12000),
                 },
               ],
