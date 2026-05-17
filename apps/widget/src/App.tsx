@@ -83,6 +83,15 @@ export function App({ widgetId, apiOrigin, shadowHost }: Props) {
 
   const start = async () => {
     if (status === "connecting" || status === "live") return;
+    // If a previous session is still alive (e.g. an upstream `error` event
+    // flipped status to "error" but the WebRTC peer connection is still
+    // playing audio), tear it down before starting a new one — otherwise
+    // two agents end up talking simultaneously.
+    if (handleRef.current) {
+      handleRef.current.stop();
+      handleRef.current = null;
+    }
+    clearSessionTimer();
     setError(null);
     setStatus("connecting");
     try {
