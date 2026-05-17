@@ -281,6 +281,9 @@ function handleEvent(
     }
 
     // Final tool call: dispatch, send output, request next assistant turn.
+    // dispatchTool is async so the function_call_output and response.create
+    // events are deferred until the post-action snapshot is captured. This
+    // is fine — the model is awaiting our output anyway.
     case "response.function_call_arguments.done": {
       const callId = String(m.call_id ?? "");
       const name = String(m.name ?? "");
@@ -288,9 +291,7 @@ function handleEvent(
       const argsRaw = String(m.arguments ?? buf.get(callId) ?? "");
       buf.delete(callId);
 
-      // Fail closed on malformed JSON: do NOT dispatch with default args,
-      // because some tools (read_page) have all-optional schemas and would
-      // execute with full default capability.
+      // Fail closed on malformed JSON: do NOT dispatch with default args.
       let parsed: unknown;
       try {
         parsed = JSON.parse(argsRaw);
@@ -298,38 +299,40 @@ function handleEvent(
         parsed = null;
       }
 
-      let result: unknown;
-      let ok = false;
-      if (parsed === null || typeof parsed !== "object") {
-        result = { ok: false, error: "invalid_tool_arguments" };
-      } else {
-        try {
-          result = dispatchTool(name, parsed);
-          if (
-            result &&
-            typeof result === "object" &&
-            "ok" in (result as Record<string, unknown>)
-          ) {
-            ok = Boolean((result as { ok?: unknown }).ok);
-          } else {
-            ok = true;
+      void (async () => {
+        let result: unknown;
+        let ok = false;
+        if (parsed === null || typeof parsed !== "object") {
+          result = { ok: false, error: "invalid_tool_arguments" };
+        } else {
+          try {
+            result = await dispatchTool(name, parsed);
+            if (
+              result &&
+              typeof result === "object" &&
+              "ok" in (result as Record<string, unknown>)
+            ) {
+              ok = Boolean((result as { ok?: unknown }).ok);
+            } else {
+              ok = true;
+            }
+          } catch (err) {
+            result = { ok: false, error: (err as Error).message };
           }
-        } catch (err) {
-          result = { ok: false, error: (err as Error).message };
         }
-      }
 
-      events.onToolCall({ name, args: parsed ?? {}, ok });
+        events.onToolCall({ name, args: parsed ?? {}, ok });
 
-      sendEvent({
-        type: "conversation.item.create",
-        item: {
-          type: "function_call_output",
-          call_id: callId,
-          output: JSON.stringify(result),
-        },
-      });
-      sendEvent({ type: "response.create" });
+        sendEvent({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output: JSON.stringify(result),
+          },
+        });
+        sendEvent({ type: "response.create" });
+      })();
       break;
     }
 

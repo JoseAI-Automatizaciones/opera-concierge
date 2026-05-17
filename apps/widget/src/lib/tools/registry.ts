@@ -15,14 +15,26 @@ import {
   interactiveSnapshot,
 } from "./dom";
 
-/** Tools that may have changed the DOM — their results get a fresh
- *  interactive snapshot appended so the model sees the updated page
- *  without needing a separate read_page round-trip. */
+/** Tools that may have changed the DOM in-place — their results get a
+ *  fresh interactive snapshot appended so the model sees the updated page
+ *  without needing a separate read_page round-trip. navigate_to is
+ *  deliberately excluded: it's a full page navigation, so any snapshot
+ *  we'd attach would either be the unloading old page or never returned
+ *  in time before the route changes. */
 const STATE_CHANGING_TOOLS = new Set([
   "click_element",
   "fill_field",
-  "navigate_to",
 ]);
+
+/** Wait for two animation frames so framework re-renders (React, Vue,
+ *  etc.) commit before we snapshot the post-action DOM. One frame is
+ *  enough for vanilla pages; the second covers libraries that batch
+ *  state updates into a microtask after the first paint. */
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
 export type RealtimeToolDef = {
   type: "function";
@@ -130,8 +142,10 @@ export const toolDefinitions: RealtimeToolDef[] = [
   },
 ];
 
-/** Dispatch a tool call by name. Unknown tools return a structured error. */
-export function dispatchTool(name: string, args: unknown): unknown {
+/** Dispatch a tool call by name. Async because state-changing tools wait
+ *  for the host page to re-render before snapshotting the post-action DOM
+ *  into the result. Unknown tools return a structured error. */
+export async function dispatchTool(name: string, args: unknown): Promise<unknown> {
   const a = (args && typeof args === "object" ? args : {}) as Record<
     string,
     unknown
@@ -161,9 +175,10 @@ export function dispatchTool(name: string, args: unknown): unknown {
       result = { ok: false, error: "unknown_tool", tool: name };
   }
 
-  // For state-changing tools that succeeded, attach a fresh interactive
-  // snapshot so the model's next decision is based on the updated DOM —
-  // critical after filters/sorts/adds that reorder or reveal elements.
+  // For state-changing tools that succeeded, wait one paint cycle for the
+  // host page's framework to commit its DOM update, THEN snapshot. Without
+  // the wait, on React/Vue/etc. the snapshot is the pre-update DOM and
+  // the model's next decision uses stale selectors.
   if (
     STATE_CHANGING_TOOLS.has(name) &&
     result &&
@@ -171,6 +186,7 @@ export function dispatchTool(name: string, args: unknown): unknown {
     (result as { ok?: boolean }).ok === true
   ) {
     try {
+      await waitForPaint();
       (result as Record<string, unknown>).page_after = interactiveSnapshot();
     } catch {
       // Snapshot is best-effort.

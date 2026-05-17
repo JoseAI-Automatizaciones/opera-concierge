@@ -35,6 +35,24 @@ function isProtectedField(el: Element): boolean {
   return el.matches(PROTECTED_SELECTOR);
 }
 
+/**
+ * True if the element is inside a sensitive context — login forms, payment
+ * forms, OTP entry boxes. We refuse to surface OR actuate elements in this
+ * context, even ones that aren't themselves password fields: the "Submit"
+ * button of a login form is off-limits because activating it relies on
+ * credentials the agent shouldn't be touching.
+ *
+ * Rule: if the enclosing <form> (or the closest [data-opera-private]
+ * container) contains ANY protected field, the entire form is off-limits.
+ */
+function isInsideProtectedContext(el: Element): boolean {
+  if (isProtectedField(el)) return true;
+  const enclosing = el.closest("form, [data-opera-private]");
+  if (!enclosing) return false;
+  if (enclosing.hasAttribute("data-opera-private")) return true;
+  return Boolean(enclosing.querySelector(PROTECTED_SELECTOR));
+}
+
 function isVisible(el: Element): boolean {
   if (!(el instanceof HTMLElement)) return false;
   const rect = el.getBoundingClientRect();
@@ -214,6 +232,7 @@ export function clickElement(args: unknown) {
   const el = resolveSingle(args.selector);
   if (!el) return { ok: false, error: "not_found_or_ambiguous" };
   if (!isVisible(el)) return { ok: false, error: "not_visible" };
+  if (isInsideProtectedContext(el)) return { ok: false, error: "protected_context" };
 
   el.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "center" });
   pulseHighlight(el);
@@ -231,7 +250,7 @@ export function fillField(args: unknown) {
   }
   const el = resolveSingle(args.selector);
   if (!el) return { ok: false, error: "not_found_or_ambiguous" };
-  if (isProtectedField(el)) return { ok: false, error: "protected_field" };
+  if (isInsideProtectedContext(el)) return { ok: false, error: "protected_field" };
   if (
     !(el instanceof HTMLInputElement) &&
     !(el instanceof HTMLTextAreaElement)
@@ -321,7 +340,7 @@ export function interactiveSnapshot(): Array<Record<string, string>> {
       "button, a[href], [role='button'], [role='link'], input:not([type='hidden']), select, textarea, [data-action], [data-filter], [data-sort], [data-testid]"
     )
   )
-    .filter((el) => isVisible(el) && !isProtectedField(el))
+    .filter((el) => isVisible(el) && !isInsideProtectedContext(el))
     .filter((el) => !el.closest("opera-concierge-root"))
     .slice(0, MAX_INTERACTIVE)
     .map(summarizeInteractive);
@@ -342,9 +361,22 @@ export function readPage(args: unknown) {
   // widget's own shadow host, then read innerText. This actually removes the
   // sensitive nodes so neither .value nor descendant text survives.
   const clone = root.cloneNode(true) as Element;
-  clone
-    .querySelectorAll(PROTECTED_SELECTOR + ", opera-concierge-root")
-    .forEach((node) => node.remove());
+  // Remove the widget host outright.
+  clone.querySelectorAll("opera-concierge-root").forEach((n) => n.remove());
+  // Remove any <form> or [data-opera-private] container that holds a
+  // protected field — strips not just the password input but every label,
+  // hint, and adjacent button text that might leak credentials context to
+  // the model. Then strip any straggling protected fields that weren't in
+  // a form.
+  clone.querySelectorAll("form, [data-opera-private]").forEach((container) => {
+    if (
+      container.hasAttribute("data-opera-private") ||
+      container.querySelector(PROTECTED_SELECTOR)
+    ) {
+      container.remove();
+    }
+  });
+  clone.querySelectorAll(PROTECTED_SELECTOR).forEach((n) => n.remove());
 
   const raw =
     (clone instanceof HTMLElement && clone.innerText) ||
