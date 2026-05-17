@@ -64,14 +64,18 @@ function summarize(el: Element): {
 }
 
 /**
- * Build a CSS selector that targets exactly one element. Falls back to a
- * tag-and-position chain if the id is non-unique. Capped depth so selectors
- * don't grow unbounded.
+ * Build a CSS selector that targets exactly one element. Prefers stable
+ * attribute-based selectors (id, data-*, name) over positional chains so
+ * the selector survives page re-renders, sorting, and filtering. Falls
+ * back to a tag + nth-of-type chain only when nothing stable is unique.
  */
 function buildSelector(el: Element, depth = 0): string {
   if (depth > 5 || el === document.documentElement)
     return el.tagName.toLowerCase();
 
+  const tag = el.tagName.toLowerCase();
+
+  // 1. #id if unique.
   if (el.id) {
     const candidate = `#${CSS.escape(el.id)}`;
     try {
@@ -81,15 +85,69 @@ function buildSelector(el: Element, depth = 0): string {
     }
   }
 
-  const parent = el.parentElement;
-  if (!parent) return el.tagName.toLowerCase();
+  // 2. tag[attr="value"] for stable attributes that uniquely identify.
+  //    Tried in priority order — data-testid is the most explicit signal
+  //    of "this is a stable hook", followed by data-product-id and
+  //    data-action+data-product-id combos, then name/aria-label.
+  const stableAttrs = [
+    "data-testid",
+    "data-test-id",
+    "data-test",
+    "data-product-id",
+    "data-id",
+    "data-sku",
+    "data-key",
+    "name",
+    "aria-label",
+  ];
+  for (const attr of stableAttrs) {
+    const value = el.getAttribute(attr);
+    if (!value) continue;
+    const candidate = `${tag}[${attr}="${cssAttrEscape(value)}"]`;
+    try {
+      if (document.querySelectorAll(candidate).length === 1) return candidate;
+    } catch {
+      // Skip invalid combos.
+    }
+  }
 
-  const tag = el.tagName.toLowerCase();
+  // 3. Pair two data-* attributes when neither alone is unique — common in
+  //    grids: data-action="add" + data-product-id="p3" → unique add button.
+  const dataAttrs = el
+    .getAttributeNames()
+    .filter((n) => n.startsWith("data-"));
+  if (dataAttrs.length >= 2) {
+    // Try every pair (small set; at most ~6 data-* attrs in practice).
+    for (let i = 0; i < dataAttrs.length; i++) {
+      for (let j = i + 1; j < dataAttrs.length; j++) {
+        const a = dataAttrs[i];
+        const b = dataAttrs[j];
+        const av = el.getAttribute(a);
+        const bv = el.getAttribute(b);
+        if (!av || !bv) continue;
+        const candidate = `${tag}[${a}="${cssAttrEscape(av)}"][${b}="${cssAttrEscape(bv)}"]`;
+        try {
+          if (document.querySelectorAll(candidate).length === 1) return candidate;
+        } catch {
+          // Skip.
+        }
+      }
+    }
+  }
+
+  // 4. Positional fallback — tag + nth-of-type relative to parent. Fragile
+  //    across re-sorts but it's our last resort.
+  const parent = el.parentElement;
+  if (!parent) return tag;
   const siblings = Array.from(parent.children).filter(
     (c) => c.tagName === el.tagName
   );
   const nth = siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(el) + 1})` : "";
   return `${buildSelector(parent, depth + 1)} > ${tag}${nth}`;
+}
+
+function cssAttrEscape(v: string): string {
+  return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 /** Resolve a selector to exactly ONE visible element, or null. */
