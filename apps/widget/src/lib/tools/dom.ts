@@ -257,22 +257,26 @@ export function readPage(args: unknown) {
 /**
  * Compact descriptor for an actionable element — enough for the model to
  * pick the right selector without a second tool call.
+ *
+ * Crucially we include the *container context* (the closest meaningful
+ * ancestor's text and data-attributes). On a product grid the button text
+ * is just "Add to cart" or "Añadir al carrito"; the product NAME and PRICE
+ * live on the surrounding <article>. Without context the model has to
+ * correlate raw page text with data-product-id values to decide which
+ * button to click, which it does unreliably.
  */
 function summarizeInteractive(el: Element) {
   const tag = el.tagName.toLowerCase();
-  const text = ((el as HTMLElement).innerText ?? el.textContent ?? "")
+  const ownText = ((el as HTMLElement).innerText ?? el.textContent ?? "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
+    .trim();
   const out: Record<string, string> = {
     tag,
     selector: buildSelector(el),
   };
-  if (text) out.text = text;
+  if (ownText) out.text = ownText.slice(0, 80);
   const aria = el.getAttribute("aria-label");
   if (aria) out.aria = aria.slice(0, 80);
-  // Surface dataset attributes commonly used as action hooks so the model
-  // sees "this button adds product p3" rather than just "Add to cart".
   for (const attr of ["data-action", "data-product-id", "data-filter", "data-sort", "data-testid"]) {
     const v = el.getAttribute(attr);
     if (v) out[attr] = v.slice(0, 60);
@@ -282,7 +286,54 @@ function summarizeInteractive(el: Element) {
     if (el.name) out.name = el.name;
     out.input_type = el.type;
   }
+
+  // Walk up to find a meaningful container: an element that is a semantic
+  // "card" (article/li/section) OR carries its own data-* attributes. Use
+  // its innerText minus the button's own text as `context`.
+  const container = findContainer(el);
+  if (container && container !== el) {
+    const containerText = (
+      (container as HTMLElement).innerText ??
+      container.textContent ??
+      ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    // Subtract this element's own text so we don't repeat "Add to cart" twice.
+    let context = ownText ? containerText.replace(ownText, "").trim() : containerText;
+    context = context.replace(/\s+/g, " ").slice(0, 160);
+    if (context) out.context = context;
+    // Surface useful data-* attrs from the container too (e.g.
+    // data-product-name="Auriculares inalámbricos" on the article).
+    for (const attr of [
+      "data-product-id",
+      "data-product-name",
+      "data-price",
+      "data-id",
+      "data-name",
+    ]) {
+      const v = container.getAttribute(attr);
+      if (v && !out[attr]) out["container_" + attr] = v.slice(0, 80);
+    }
+  }
   return out;
+}
+
+function findContainer(el: Element): Element | null {
+  let cur: Element | null = el.parentElement;
+  let depth = 0;
+  while (cur && depth < 6 && cur !== document.body) {
+    const tag = cur.tagName.toLowerCase();
+    if (tag === "article" || tag === "li" || tag === "section") return cur;
+    // Any ancestor with its own data-* attribute is treated as a meaningful
+    // container — covers card-style components that aren't semantic tags.
+    for (const attr of cur.getAttributeNames()) {
+      if (attr.startsWith("data-") && attr !== "data-action") return cur;
+    }
+    cur = cur.parentElement;
+    depth++;
+  }
+  return null;
 }
 
 export function navigateTo(args: unknown) {

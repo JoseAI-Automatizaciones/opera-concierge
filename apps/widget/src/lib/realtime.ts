@@ -122,8 +122,8 @@ export async function connectRealtime(
                 {
                   type: "input_text",
                   text:
-                    "PAGE_SNAPSHOT (preloaded — use these selectors directly, do NOT call read_page again unless the page changes):\n" +
-                    JSON.stringify(snapshot, null, 0).slice(0, 6000),
+                    "PAGE_SNAPSHOT (preloaded — use these selectors directly, do NOT call read_page again unless the page changes). Each interactive item includes a 'context' field with the surrounding card's text (product name, price, etc.) — use that to match user requests to the right element:\n" +
+                    JSON.stringify(snapshot, null, 0).slice(0, 12000),
                 },
               ],
             },
