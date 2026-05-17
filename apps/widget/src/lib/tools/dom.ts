@@ -59,12 +59,26 @@ function assignRef(el: HTMLElement): string {
   const id = `e${refCounter}`;
   refMap.set(id, { weak: new WeakRef(el), selector: buildSelector(el) });
   elementToRef.set(el, id);
-  // Evict oldest entries when over cap. Map iteration order is insertion
-  // order, so .keys().next().value is the oldest.
+  // Evict over-cap. CRITICAL: never evict a ref that's still in the
+  // model's current view (lastSnapshot) — that would make the same DOM
+  // node appear as removed+added on the next diff, contradicting the
+  // "ref is stable until you see it in 'removed'" contract baked into
+  // the agent prompt. Scan insertion-order for the oldest UNPINNED entry.
   while (refMap.size > MAX_REF_MAP_SIZE) {
-    const oldest = refMap.keys().next().value;
-    if (!oldest) break;
-    refMap.delete(oldest);
+    let evicted = false;
+    for (const key of refMap.keys()) {
+      if (!lastSnapshot.has(key)) {
+        refMap.delete(key);
+        evicted = true;
+        break;
+      }
+    }
+    if (!evicted) {
+      // Every ref is pinned by the model's current view. Allow refMap to
+      // grow temporarily — incorrectness is worse than memory bloat, and
+      // the next diff will release whatever's no longer on the page.
+      break;
+    }
   }
   return id;
 }
@@ -459,10 +473,10 @@ const INTERACTIVE_SELECTOR = [
 ].join(",");
 
 /** Build the raw interactive-element list. Does not record state. */
-function buildInteractive(): Array<Record<string, string>> {
-  const root = document.body;
-  if (!root) return [];
-  return Array.from(root.querySelectorAll(INTERACTIVE_SELECTOR))
+function buildInteractive(root?: Element | null): Array<Record<string, string>> {
+  const r = root ?? document.body;
+  if (!r) return [];
+  return Array.from(r.querySelectorAll(INTERACTIVE_SELECTOR))
     .filter((el) => isVisible(el) && !isInsideProtectedContext(el))
     .filter((el) => !el.closest("opera-concierge-root"))
     .slice(0, MAX_INTERACTIVE)
@@ -490,8 +504,8 @@ function recordSnapshot(items: Array<Record<string, string>>): void {
  * delta against this view. Called from readPage and the initial widget
  * snapshot injection.
  */
-export function interactiveSnapshot(): Array<Record<string, string>> {
-  const items = buildInteractive();
+export function interactiveSnapshot(root?: Element | null): Array<Record<string, string>> {
+  const items = buildInteractive(root);
   recordSnapshot(items);
   return items;
 }
@@ -595,10 +609,11 @@ export function readPage(args: unknown) {
     "";
 
   // Build a compact map of interactive elements with refs, so the agent
-  // can act in ONE round-trip. Working on the live document — we need
-  // real elements that resolve back via refMap. Also records the state
-  // into lastSnapshot so the next page_after diffs against this.
-  const interactiveSet = interactiveSnapshot();
+  // can act in ONE round-trip. Scoped to the caller's selector if given;
+  // otherwise full document. Records state into lastSnapshot so the next
+  // page_after diffs against this.
+  const liveRoot = selector ? document.querySelector(selector) : document.body;
+  const interactiveSet = interactiveSnapshot(liveRoot);
 
   return {
     ok: true,

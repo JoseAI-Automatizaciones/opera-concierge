@@ -52,7 +52,7 @@ export const toolDefinitions: RealtimeToolDef[] = [
     type: "function",
     name: "find_elements",
     description:
-      "Search the visible page for elements matching either a piece of visible text OR a CSS selector. Returns up to 8 matches as ref handles (e.g. 'e42') with tag and visible text snippet. Use the ref in click_element/fill_field/scroll_to_element. Usually not needed — the PAGE_SNAPSHOT already lists every interactive element.",
+      "Search the visible page for elements matching a piece of visible text (e.g. 'Add to cart'). Returns up to 8 matches as ref handles (e.g. 'e42') with tag and visible text snippet. Use the returned ref with click_element / fill_field / scroll_to_element. Usually NOT needed — the PAGE_SNAPSHOT and page_after deltas already list every interactive element with its ref.",
     parameters: {
       type: "object",
       properties: {
@@ -113,7 +113,7 @@ export const toolDefinitions: RealtimeToolDef[] = [
     type: "function",
     name: "read_page",
     description:
-      "Read the page in ONE call: returns visible text PLUS a structured list of interactive elements (buttons, links, inputs, anything with data-action/data-product-id/data-filter/data-sort) each with its CSS selector. Use this once at the start of a session to learn what's on the page, then call click_element / fill_field directly with the selectors returned here — DO NOT call find_elements again unless read_page didn't include what you need.",
+      "Re-read the page from scratch. Returns visible text PLUS a fresh list of interactive elements with ref handles (e.g. 'e42'). Only call this if the user explicitly says the page changed in a way that the page_after deltas missed (e.g. full route change). On normal sessions the initial PAGE_SNAPSHOT plus the page_after delta in every tool result is enough.",
     parameters: {
       type: "object",
       properties: {
