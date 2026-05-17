@@ -1,20 +1,19 @@
 "use client";
 
 import { useActionState } from "react";
-import { createWidget, type CreateWidgetState } from "./actions";
+import type { WidgetRowSafe } from "@/lib/supabase/types";
+import { updateWidget, type UpdateWidgetState } from "../actions";
 
-const initialState: CreateWidgetState = { ok: false, message: "" };
+const initialState: UpdateWidgetState = { ok: false, message: "" };
 
-export function CreateWidgetForm() {
-  const [state, formAction, pending] = useActionState(
-    createWidget,
-    initialState
-  );
+export function EditWidgetForm({ widget }: { widget: WidgetRowSafe }) {
+  const boundAction = updateWidget.bind(null, widget.id);
+  const [state, formAction, pending] = useActionState(boundAction, initialState);
 
   return (
     <form action={formAction} className="opera-card flex flex-col gap-5 p-6">
       <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-opera-gold">
-        Create a widget
+        Edit widget
       </h2>
 
       <Field label="Name" htmlFor="name">
@@ -23,7 +22,7 @@ export function CreateWidgetForm() {
           name="name"
           required
           maxLength={120}
-          placeholder="My Shopify store"
+          defaultValue={widget.name}
           className="opera-input"
         />
       </Field>
@@ -37,7 +36,7 @@ export function CreateWidgetForm() {
           id="allowed_origins"
           name="allowed_origins"
           rows={3}
-          placeholder={"https://shop.example.com\nhttps://staging.example.com"}
+          defaultValue={widget.allowed_origins.join("\n")}
           className="opera-input font-mono text-sm"
         />
       </Field>
@@ -45,14 +44,14 @@ export function CreateWidgetForm() {
       <Field
         label="System prompt"
         htmlFor="system_prompt"
-        hint="Instructions for the agent. Tell it what to do, how to behave, what tools it has, and how to use them. Leave blank for the default behavior."
+        hint="Instructions for the agent. Be directive — tell it to execute actions, not ask. Leave blank for the OpenAI default."
       >
         <textarea
           id="system_prompt"
           name="system_prompt"
-          rows={6}
+          rows={10}
           maxLength={8000}
-          placeholder="You are a concierge for an online store. Execute actions quickly with the DOM tools; don't ask for confirmation unless ambiguous…"
+          defaultValue={widget.system_prompt ?? ""}
           className="opera-input font-mono text-sm"
         />
       </Field>
@@ -60,17 +59,20 @@ export function CreateWidgetForm() {
       <Field
         label="OpenAI API key"
         htmlFor="openai_api_key"
-        hint="Used to mint Realtime sessions for this widget. Stays server-side — never sent to visitors. Get one at platform.openai.com → API keys."
+        hint={
+          widget.has_openai_api_key
+            ? "A key is configured. Leave blank to keep it; type a new one to replace."
+            : "⚠ No key configured. Paste your OpenAI key (starts with sk-)."
+        }
       >
         <input
           id="openai_api_key"
           name="openai_api_key"
           type="password"
           autoComplete="off"
-          required
-          minLength={20}
+          minLength={widget.has_openai_api_key ? 0 : 20}
           maxLength={500}
-          placeholder="sk-…"
+          placeholder={widget.has_openai_api_key ? "•••••• (unchanged)" : "sk-…"}
           className="opera-input font-mono text-sm"
         />
       </Field>
@@ -80,7 +82,7 @@ export function CreateWidgetForm() {
           <input
             id="primary_color"
             name="primary_color"
-            defaultValue="#B08A3E"
+            defaultValue={widget.primary_color}
             pattern="^#[0-9a-fA-F]{6}$"
             className="opera-input font-mono text-sm"
           />
@@ -89,7 +91,7 @@ export function CreateWidgetForm() {
           <select
             id="position"
             name="position"
-            defaultValue="bottom-right"
+            defaultValue={widget.position}
             className="opera-input"
           >
             <option value="bottom-right">Bottom right</option>
@@ -102,7 +104,7 @@ export function CreateWidgetForm() {
           <select
             id="voice"
             name="voice"
-            defaultValue="verse"
+            defaultValue={widget.voice}
             className="opera-input"
           >
             <option value="verse">Verse</option>
@@ -121,60 +123,43 @@ export function CreateWidgetForm() {
         <legend className="px-2 text-xs font-medium uppercase tracking-[0.18em] text-opera-gold">
           Usage limits
         </legend>
-        <p className="mb-4 text-xs text-opera-muted/80">
-          Protects your OpenAI bill from runaway visitors. Limits apply per
-          visitor (currently per IP).
-        </p>
         <div className="grid gap-5 sm:grid-cols-3">
-          <Field
-            label="Sessions / minute"
-            htmlFor="max_sessions_per_minute"
-            hint="Burst rate. Default 5."
-          >
+          <Field label="Sessions / minute" htmlFor="max_sessions_per_minute">
             <input
               id="max_sessions_per_minute"
               name="max_sessions_per_minute"
               type="number"
               min={1}
               max={1000}
-              defaultValue={5}
+              defaultValue={widget.max_sessions_per_minute}
               className="opera-input font-mono text-sm"
             />
           </Field>
-          <Field
-            label="Sessions / day"
-            htmlFor="max_sessions_per_day"
-            hint="Daily cap. Default 15."
-          >
+          <Field label="Sessions / day" htmlFor="max_sessions_per_day">
             <input
               id="max_sessions_per_day"
               name="max_sessions_per_day"
               type="number"
               min={1}
               max={100000}
-              defaultValue={15}
+              defaultValue={widget.max_sessions_per_day}
               className="opera-input font-mono text-sm"
             />
           </Field>
-          <Field
-            label="Max seconds / session"
-            htmlFor="max_session_seconds"
-            hint="Auto-end the session. Default 480 (8 min)."
-          >
+          <Field label="Max seconds / session" htmlFor="max_session_seconds">
             <input
               id="max_session_seconds"
               name="max_session_seconds"
               type="number"
               min={30}
               max={7200}
-              defaultValue={480}
+              defaultValue={widget.max_session_seconds}
               className="opera-input font-mono text-sm"
             />
           </Field>
           <Field
             label="Max tokens / response"
             htmlFor="max_response_output_tokens"
-            hint="Caps each assistant reply at mint time. Default 4096."
           >
             <input
               id="max_response_output_tokens"
@@ -182,17 +167,11 @@ export function CreateWidgetForm() {
               type="number"
               min={100}
               max={4096}
-              defaultValue={4096}
+              defaultValue={widget.max_response_output_tokens}
               className="opera-input font-mono text-sm"
             />
           </Field>
         </div>
-        <p className="mt-4 text-xs text-opera-muted/70">
-          ⚠ These caps protect against well-behaved clients only. A determined
-          attacker can override session config during the WebRTC handshake.
-          Your real billing brake is your OpenAI account spending limit — set
-          it in your OpenAI dashboard.
-        </p>
       </fieldset>
 
       <div className="flex items-center justify-between gap-4">
@@ -206,14 +185,14 @@ export function CreateWidgetForm() {
           }`}
           aria-live="polite"
         >
-          {state.message || "All fields required unless marked optional."}
+          {state.message || "Changes apply to new sessions only."}
         </p>
         <button
           type="submit"
           disabled={pending}
           className="inline-flex h-10 items-center justify-center rounded-full bg-opera-gold px-5 text-sm font-medium text-opera-black transition hover:bg-opera-amber disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pending ? "Creating…" : "Create widget"}
+          {pending ? "Saving…" : "Save changes"}
         </button>
       </div>
     </form>

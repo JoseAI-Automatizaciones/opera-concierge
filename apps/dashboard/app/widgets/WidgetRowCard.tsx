@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { WidgetRowSafe } from "@/lib/supabase/types";
 import { deleteWidget } from "./actions";
@@ -97,14 +98,22 @@ export function WidgetRowCard({
             ? "⚠ No allowed origins — widget will refuse to load anywhere"
             : `Allowed origins: ${widget.allowed_origins.join(", ")}`}
         </p>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={pending}
-          className="text-xs text-red-300/80 underline-offset-2 hover:underline disabled:opacity-50"
-        >
-          {pending ? "Deleting…" : "Delete"}
-        </button>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/widgets/${widget.id}`}
+            className="text-xs text-opera-amber underline-offset-2 hover:underline"
+          >
+            Edit
+          </Link>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            className="text-xs text-red-300/80 underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            {pending ? "Deleting…" : "Delete"}
+          </button>
+        </div>
       </footer>
     </article>
   );
