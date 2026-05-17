@@ -23,7 +23,7 @@ import { dispatchTool, toolDefinitions } from "./tools/registry";
  *   https://platform.openai.com/docs/guides/realtime#connect-via-webrtc
  */
 
-const REALTIME_BASE = "https://api.openai.com/v1/realtime";
+const REALTIME_SDP_ENDPOINT = "https://api.openai.com/v1/realtime/calls";
 
 export type RealtimeEvents = {
   onStatus: (s: "connecting" | "live" | "ended" | "error") => void;
@@ -55,8 +55,6 @@ export async function connectRealtime(
   if (!ephemeralKey) {
     throw new Error("Realtime session missing ephemeral value.");
   }
-
-  const model = session.session?.model ?? "gpt-realtime";
 
   // Step 1: mic.
   let mic: MediaStream;
@@ -121,21 +119,19 @@ export async function connectRealtime(
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const sdpResponse = await fetch(
-      `${REALTIME_BASE}?model=${encodeURIComponent(model)}`,
-      {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          "Content-Type": "application/sdp",
-        },
-      }
-    );
+    const sdpResponse = await fetch(REALTIME_SDP_ENDPOINT, {
+      method: "POST",
+      body: offer.sdp,
+      headers: {
+        Authorization: `Bearer ${ephemeralKey}`,
+        "Content-Type": "application/sdp",
+      },
+    });
 
     if (!sdpResponse.ok) {
+      const detail = await sdpResponse.text().catch(() => "");
       throw new Error(
-        `Realtime SDP exchange failed: ${sdpResponse.status} ${sdpResponse.statusText}`
+        `Realtime SDP exchange failed: ${sdpResponse.status} ${sdpResponse.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ""}`
       );
     }
 
