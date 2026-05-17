@@ -15,15 +15,11 @@ export type PublicWidgetConfig = {
 
 /**
  * Response shape from POST /api/realtime/session.
- * Mirrors OpenAI's `client_secrets` endpoint response. We forward the
- * upstream JSON verbatim, so the value at `client_secret.value` is the
- * ephemeral key to use in the WebRTC handshake.
+ * Mirrors OpenAI's `/v1/realtime/client_secrets` endpoint response (flat).
  */
 export type RealtimeSession = {
-  client_secret: {
-    value: string;
-    expires_at: number;
-  };
+  value: string;
+  expires_at: number;
   session?: {
     model?: string;
   };

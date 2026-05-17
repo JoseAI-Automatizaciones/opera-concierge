@@ -51,9 +51,9 @@ export async function connectRealtime(
 ): Promise<RealtimeHandle> {
   events.onStatus("connecting");
 
-  const ephemeralKey = session.client_secret?.value;
+  const ephemeralKey = session.value;
   if (!ephemeralKey) {
-    throw new Error("Realtime session missing client_secret.value.");
+    throw new Error("Realtime session missing ephemeral value.");
   }
 
   const model = session.session?.model ?? "gpt-realtime";

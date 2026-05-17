@@ -42,3 +42,4 @@ apps/dashboard/public/widget.js
 apps/dashboard/public/widget.js.map
 
 .vercel
+test/
