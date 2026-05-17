@@ -100,11 +100,22 @@ export async function connectRealtime(
     const transcripts = new Map<string, TranscriptEntry>();
 
     dc.addEventListener("open", () => {
-      // Register DOM tools so the agent can call them.
-      sendEvent({
+      // Register DOM tools so the agent can call them. The new Realtime API
+      // requires `type: "realtime"` on the session payload so the server
+      // discriminates session-config shapes correctly — without it, tools
+      // were silently dropped and the model never emitted function-call
+      // events (model would narrate "Done" without ever invoking a tool).
+      const sessionUpdate = {
         type: "session.update",
-        session: { tools: toolDefinitions, tool_choice: "auto" },
-      });
+        session: {
+          type: "realtime",
+          tools: toolDefinitions,
+          tool_choice: "auto",
+        },
+      };
+      // eslint-disable-next-line no-console
+      console.debug("[opera-concierge] sending session.update", sessionUpdate);
+      sendEvent(sessionUpdate);
 
       // Pre-inject the current page snapshot as a system-side conversation
       // item. This saves the obligatory read_page round-trip on first turn:
@@ -113,16 +124,22 @@ export async function connectRealtime(
       try {
         const snapshot = readPage({});
         if (snapshot && (snapshot as { ok?: boolean }).ok) {
+          // Use role:"user" — the Realtime API historically only accepts
+          // user/assistant for conversation items and silently rejects
+          // system-role items. A rejected snapshot meant the model never
+          // saw the page context AND may have left the session in a
+          // half-configured state, which is consistent with the model
+          // hallucinating tool calls (saying "added" without invoking).
           sendEvent({
             type: "conversation.item.create",
             item: {
               type: "message",
-              role: "system",
+              role: "user",
               content: [
                 {
                   type: "input_text",
                   text:
-                    "PAGE_SNAPSHOT (preloaded — use these selectors directly, do NOT call read_page again unless the page changes). Each interactive item includes a 'context' field with the surrounding card's text (product name, price, etc.) — use that to match user requests to the right element:\n" +
+                    "[INTERNAL PAGE CONTEXT — not spoken by the user, do not respond to it. Use these selectors directly for tool calls; do NOT call read_page again unless the user says the page changed. Each interactive item's 'context' field has the surrounding card's text including product name and price]\n" +
                     JSON.stringify(snapshot, null, 0).slice(0, 12000),
                 },
               ],
