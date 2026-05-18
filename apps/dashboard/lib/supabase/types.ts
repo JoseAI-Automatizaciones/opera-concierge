@@ -5,6 +5,31 @@
  * regenerate via `supabase gen types typescript --project-id <ref>` and replace.
  */
 
+export type CustomToolDef = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  endpoint: string;
+  method: "POST";
+  auth_header?: string;
+  timeout_ms?: number;
+};
+
+/** Operator-facing projection — strips the secret auth_header but keeps a
+ *  boolean so the dashboard UI can render "[REDACTED]" placeholder text.
+ *  Used inside WidgetRowSafe; ALL paths from server → operator client go
+ *  through this so a bearer token never crosses to the browser. */
+export type SafeCustomTool = Omit<CustomToolDef, "auth_header"> & {
+  has_auth_header: boolean;
+};
+
+/** Public-safe projection of a custom tool — what the widget receives.
+ *  Excludes endpoint, auth_header, timeout_ms (all server-only). */
+export type PublicCustomTool = Pick<
+  CustomToolDef,
+  "name" | "description" | "parameters"
+>;
+
 export type WidgetRow = {
   id: string;
   name: string;
@@ -24,6 +49,13 @@ export type WidgetRow = {
    * the operator hasn't yet supplied a key.
    */
   openai_api_key: string | null;
+  /**
+   * Operator-defined custom HTTP tools. Each entry has server-only fields
+   * (endpoint, auth_header) and public-safe fields (name, description,
+   * parameters). The widget config endpoint returns only the public-safe
+   * projection; the proxy route reads the server-only fields directly.
+   */
+  custom_tools: CustomToolDef[];
   /**
    * HS256 secret for verifying visitor-identity JWTs (Layer 2 signed).
    * Server-only — never include in PublicWidgetConfig or WidgetRowSafe.
@@ -51,7 +83,12 @@ export type WidgetRow = {
 export type PublicWidgetConfig = Pick<
   WidgetRow,
   "id" | "name" | "primary_color" | "position" | "voice" | "max_session_seconds"
->;
+> & {
+  /** Public-safe projection of the operator's custom tools. The widget
+   *  forwards these to OpenAI on session.update so the agent can call
+   *  them. The endpoint + auth header are never exposed here. */
+  custom_tools: PublicCustomTool[];
+};
 
 export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
   return {
@@ -61,6 +98,11 @@ export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
     position: row.position,
     voice: row.voice,
     max_session_seconds: row.max_session_seconds,
+    custom_tools: (row.custom_tools ?? []).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })),
   };
 }
 
@@ -74,22 +116,28 @@ export function toPublicConfig(row: WidgetRow): PublicWidgetConfig {
  * route is the ONLY place that should read the raw `openai_api_key` column,
  * and that data never escapes the route.
  */
-export type WidgetRowSafe = Omit<WidgetRow, "openai_api_key" | "visitor_jwt_secret"> & {
+export type WidgetRowSafe = Omit<
+  WidgetRow,
+  "openai_api_key" | "visitor_jwt_secret" | "custom_tools"
+> & {
   has_openai_api_key: boolean;
   has_visitor_jwt_secret: boolean;
+  custom_tools: SafeCustomTool[];
 };
 
 export function toSafeRow(row: WidgetRow): WidgetRowSafe {
-  // Destructure to strip both server-only secrets; rename the local
-  // shadowed bindings with underscore prefix so eslint doesn't complain
-  // about unused destructured vars.
-  const { openai_api_key: _k, visitor_jwt_secret: _s, ...rest } = row;
+  const { openai_api_key: _k, visitor_jwt_secret: _s, custom_tools: _t, ...rest } = row;
   void _k;
   void _s;
+  void _t;
   return {
     ...rest,
     has_openai_api_key: Boolean(row.openai_api_key),
     has_visitor_jwt_secret: Boolean(row.visitor_jwt_secret),
+    custom_tools: (row.custom_tools ?? []).map((t) => {
+      const { auth_header, ...toolRest } = t;
+      return { ...toolRest, has_auth_header: Boolean(auth_header) };
+    }),
   };
 }
 

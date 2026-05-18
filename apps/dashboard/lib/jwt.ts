@@ -129,3 +129,117 @@ export function generateVisitorJwtSecret(): string {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+/**
+ * Server-side session-binding tokens for the custom-tool proxy. Signed
+ * with SUPABASE_SERVICE_ROLE_KEY (already a long, high-entropy server-only
+ * secret — no new env var to manage).
+ *
+ * What this PROTECTS:
+ *   - Calls to /api/tools/call must correspond to an active realtime
+ *     session that was minted through /api/realtime/session (and thus
+ *     passed the mint quota check). An attacker can't open /api/tools/call
+ *     without first burning a session quota slot.
+ *   - The TTL caps the window over which a leaked token is replayable.
+ *   - Per-session tool-call quotas + verified visitor bucketing throttle
+ *     abuse from any single session.
+ *
+ * What this DOES NOT PROTECT (be honest with operators):
+ *   - A visitor with DevTools / XSS on an allowed origin can still read
+ *     the token from their own session's response and replay it within
+ *     the TTL. They can craft arbitrary tool_name + args. The proxy will
+ *     attach the operator's auth_header server-side and forward.
+ *   - Therefore: operators MUST treat tool-call args as UNTRUSTED INPUT
+ *     and validate them in their backend (auth, scoping, sanity checks).
+ *     The capability provides session binding + audit + rate-limit
+ *     anchoring, not arg authentication.
+ */
+
+function getCapabilitySecret(): string {
+  const s = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!s) {
+    throw new Error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY — capability tokens cannot be signed."
+    );
+  }
+  return s;
+}
+
+function b64uEncode(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function b64uEncodeString(s: string): string {
+  return b64uEncode(new TextEncoder().encode(s));
+}
+
+export async function mintSessionCapability(
+  widgetId: string,
+  ttlSeconds = 10 * 60,
+  visitorSub?: string | null
+): Promise<string> {
+  const header = b64uEncodeString(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const now = Math.floor(Date.now() / 1000);
+  const claims: Record<string, unknown> = {
+    sub: widgetId,
+    iat: now,
+    exp: now + ttlSeconds,
+    scope: "tools.call",
+  };
+  // Bind the verified visitor sub INTO the capability when known. The
+  // proxy can then trust the visitor identity without re-verifying the
+  // original (possibly shorter-lived) visitor JWT on every tool call.
+  if (visitorSub) claims.visitor_sub = visitorSub;
+  const payload = b64uEncodeString(JSON.stringify(claims));
+  const signingInput = `${header}.${payload}`;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(getCapabilitySecret()),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sigBytes = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput))
+  );
+  return `${signingInput}.${b64uEncode(sigBytes)}`;
+}
+
+export type CapabilityVerification =
+  | { ok: true; widgetId: string; visitorSub: string | null }
+  | { ok: false; reason: string };
+
+export async function verifySessionCapability(
+  token: string,
+  expectedWidgetId: string
+): Promise<CapabilityVerification> {
+  // The capability is itself a JWT signed with the service-role key.
+  // Re-decode here to read the visitor_sub claim that mintSessionCapability
+  // may have bound in — verifyVisitorJwt only returns sub (the widget id).
+  const result = await verifyVisitorJwt(token, getCapabilitySecret());
+  if (!result.ok) return { ok: false, reason: result.reason };
+  if (result.sub !== expectedWidgetId) {
+    return { ok: false, reason: "widget_mismatch" };
+  }
+  // Decode the payload to enforce scope and extract visitor_sub.
+  let visitorSub: string | null = null;
+  try {
+    const parts = token.split(".");
+    const payloadJson = atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/").padEnd(parts[1]!.length + ((4 - (parts[1]!.length % 4)) % 4), "="));
+    const payload = JSON.parse(payloadJson) as { scope?: unknown; visitor_sub?: unknown };
+    // Enforce scope so a JWT minted by a different server path (also
+    // signed with the service-role key) can't unlock this route.
+    if (payload.scope !== "tools.call") {
+      return { ok: false, reason: "bad_scope" };
+    }
+    if (typeof payload.visitor_sub === "string") visitorSub = payload.visitor_sub;
+  } catch {
+    return { ok: false, reason: "decode_failed" };
+  }
+  return { ok: true, widgetId: result.sub, visitorSub };
+}

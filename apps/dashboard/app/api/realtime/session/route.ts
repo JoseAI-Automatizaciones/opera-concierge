@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import type { WidgetRow } from "@/lib/supabase/types";
 import { corsHeaders, SENTINEL_ID, uniformNotFound } from "@/lib/api/cors";
 import { bucketKeyFromRequest, consumeQuota } from "@/lib/quotas";
-import { verifyVisitorJwt } from "@/lib/jwt";
+import { verifyVisitorJwt, mintSessionCapability } from "@/lib/jwt";
 
 /**
  * POST /api/realtime/session
@@ -92,6 +92,9 @@ const DEFAULT_AGENT_PROMPT = `You are a voice concierge operating the current we
 - Respond naturally without tools. Keep it short.
 - If they ask "what's on the page" or similar, summarize from the snapshot text — do NOT call read_page again.
 
+## Custom HTTP tools (when present):
+Some sessions include operator-defined tools beyond the built-in DOM set (e.g. lookup_order, check_balance). These tools call the operator's backend, return JSON. Use them when the user's request needs operator data (order status, account info, inventory) that isn't on the page. Their parameters and descriptions are shown in your tools list — call them exactly like a built-in. Result shape: { ok: boolean, status?: number, body: ... }. If ok=false, tell the user briefly that you couldn't reach the service.
+
 ---
 
 ## Operator-defined personality and domain:
@@ -141,7 +144,13 @@ export async function POST(req: Request) {
   // collapse to the uniform 404 to avoid leaking "this widget requires
   // JWT" as a side channel. Operators see the failure in their browser
   // console + can verify with the integration sample code.
+  // Track verified vs unverified separately. Both feed the agent's
+  // instructions block, but ONLY the verified value is allowed to be
+  // bound into the tool-call capability — otherwise the proxy would
+  // forward a forgeable unsigned id under the trusted X-Opera-Visitor
+  // header to operator backends.
   let visitorId: string | null = null;
+  let verifiedVisitorSub: string | null = null;
   if (parsed.success) {
     if (data.visitor_jwt_secret) {
       const token = parsed.data.visitor_token;
@@ -149,6 +158,7 @@ export async function POST(req: Request) {
       const result = await verifyVisitorJwt(token, data.visitor_jwt_secret);
       if (!result.ok) return uniformNotFound(origin);
       visitorId = result.sub;
+      verifiedVisitorSub = result.sub;
     } else if (parsed.data.visitor_id) {
       visitorId = parsed.data.visitor_id;
     }
@@ -235,7 +245,31 @@ export async function POST(req: Request) {
   }
 
   const json = await upstream.json();
-  return NextResponse.json(json, {
-    headers: { ...corsHeaders(origin), "Cache-Control": "no-store" },
-  });
+
+  // Mint a session-binding capability the widget will present on every
+  // /api/tools/call. TTL matches the widget's wall-clock session cap
+  // (+ 60s slack) so custom tools keep working for the full session.
+  // The capability is bound to this widget_id; see lib/jwt.ts for the
+  // full threat-model writeup (it provides session binding + audit, not
+  // arg authentication — operators MUST validate tool args).
+  let operaSessionToken: string | null = null;
+  try {
+    operaSessionToken = await mintSessionCapability(
+      data.id,
+      Math.min(data.max_session_seconds + 60, 7260),
+      // Only the JWT-verified sub crosses into the capability. An unsigned
+      // visitor_id MUST NOT be promoted here — that would make the proxy
+      // forward an attacker-controlled value under the trusted
+      // X-Opera-Visitor header.
+      verifiedVisitorSub
+    );
+  } catch {
+    // Capability minting failure shouldn't block the realtime session
+    // itself — custom tools simply won't work this round.
+  }
+
+  return NextResponse.json(
+    { ...json, opera_session_token: operaSessionToken },
+    { headers: { ...corsHeaders(origin), "Cache-Control": "no-store" } }
+  );
 }

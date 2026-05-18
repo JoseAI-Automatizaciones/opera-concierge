@@ -108,7 +108,9 @@ export function App({ widgetId, apiOrigin, visitorId, visitorToken, shadowHost }
       });
       if (!aliveRef.current) return;
 
-      const handle = await connectRealtime(session, {
+      const handle = await connectRealtime(
+        session,
+        {
         onStatus: (s) => {
           if (aliveRef.current) setStatus(s);
         },
@@ -148,7 +150,23 @@ export function App({ widgetId, apiOrigin, visitorId, visitorToken, shadowHost }
         onError: (err) => {
           if (aliveRef.current) setError(err.message);
         },
-      });
+        },
+        // Only advertise custom tools when we have a capability to proxy
+        // them — otherwise the model would call tools that can't succeed.
+        session.opera_session_token ? (config?.custom_tools ?? []) : [],
+        session.opera_session_token
+          ? {
+              apiOrigin,
+              widgetId,
+              visitorId,
+              visitorToken,
+              operaSessionToken: session.opera_session_token,
+              customToolNames: new Set(
+                (config?.custom_tools ?? []).map((t) => t.name)
+              ),
+            }
+          : null
+      );
 
       // If we unmounted while connectRealtime was resolving, tear it down
       // immediately so no orphaned mic/PC outlives the component.

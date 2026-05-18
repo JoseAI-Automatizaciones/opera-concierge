@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth/session";
 import { toSafeRow, type WidgetRow } from "@/lib/supabase/types";
 import { EditWidgetForm } from "./EditWidgetForm";
 import { VisitorJwtPanel } from "./VisitorJwtPanel";
+import { CustomToolsPanel } from "./CustomToolsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,23 @@ export default async function EditWidgetPage({
           widgetId={widget.id}
           hasSecret={widget.has_visitor_jwt_secret}
           appUrl={appUrl}
+        />
+
+        <CustomToolsPanel
+          widgetId={widget.id}
+          // widget.custom_tools is already stripped of auth_header by
+          // toSafeRow; each entry carries has_auth_header instead. We
+          // rehydrate the panel's view-only form with a sentinel string
+          // so the operator can SEE which tools have an auth header set
+          // and rotate them by typing a fresh value (or leave the
+          // sentinel to keep the stored secret).
+          initialTools={widget.custom_tools.map((t) => {
+            const { has_auth_header: _h, ...display } = t;
+            void _h;
+            return t.has_auth_header
+              ? { ...display, auth_header: "__REDACTED__" }
+              : display;
+          })}
         />
       </main>
     </div>

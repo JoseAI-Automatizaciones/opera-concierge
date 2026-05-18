@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
 import { generateVisitorJwtSecret } from "@/lib/jwt";
+import { customToolsArraySchema } from "@/lib/custom-tools";
 
 const sharedFields = {
   name: z.string().min(1, "Name is required").max(120),
@@ -227,6 +228,97 @@ export async function setVisitorJwtSecret(
   revalidatePath(`/widgets/${id}`);
   revalidatePath("/widgets");
   return { ok: true, secret: newSecret ?? undefined };
+}
+
+/** Replace the operator's custom_tools array for a widget. Accepts the
+ *  parsed JSON; the caller (form action) handles JSON.parse + user-facing
+ *  error mapping so this stays a thin DB write.
+ *
+ *  auth_header handling: the panel receives tools with auth_header
+ *  replaced by the sentinel "__REDACTED__" (so the real value never
+ *  reaches the browser). On save, any tool whose auth_header IS that
+ *  sentinel keeps the existing stored value. A real new value rotates;
+ *  omitting the field clears it. */
+export async function setCustomTools(
+  id: string,
+  rawJson: string
+): Promise<{ ok: boolean; message?: string }> {
+  const user = await requireUser();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    return { ok: false, message: "Not valid JSON." };
+  }
+
+  // Load existing tools to merge redacted auth headers back in.
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("widgets")
+    .select("custom_tools")
+    .eq("id", id)
+    .eq("owner_user_id", user.id)
+    .maybeSingle<{ custom_tools: Array<{ name: string; auth_header?: string }> | null }>();
+  const existingByName = new Map<string, string>();
+  for (const t of existing?.custom_tools ?? []) {
+    if (t.auth_header) existingByName.set(t.name, t.auth_header);
+  }
+
+  if (Array.isArray(parsed)) {
+    for (const t of parsed) {
+      if (
+        t &&
+        typeof t === "object" &&
+        "name" in t &&
+        typeof (t as { name?: unknown }).name === "string" &&
+        "auth_header" in t &&
+        (t as { auth_header?: unknown }).auth_header === "__REDACTED__"
+      ) {
+        const stored = existingByName.get((t as { name: string }).name);
+        if (stored) {
+          (t as { auth_header?: string }).auth_header = stored;
+        } else {
+          // The operator left the redacted placeholder on a tool whose
+          // name doesn't match any existing tool — most commonly a rename.
+          // Refuse rather than silently dropping the credential, which
+          // would break their integration on the next call.
+          return {
+            ok: false,
+            message: `Tool "${(t as { name: string }).name}": auth_header is "__REDACTED__" but no stored secret matches that name (did you rename it?). Paste the real auth_header to confirm.`,
+          };
+        }
+      }
+    }
+  }
+
+  const result = customToolsArraySchema.safeParse(parsed);
+  if (!result.success) {
+    return {
+      ok: false,
+      message: result.error.issues[0]?.message ?? "Invalid tool definitions.",
+    };
+  }
+
+  // .select() so we can confirm a row actually matched. Without this,
+  // an .update() against zero rows (widget deleted or transferred since
+  // page load) would silently return ok:true and the UI would say
+  // "Saved." even though nothing was persisted.
+  const { data: updated, error } = await supabase
+    .from("widgets")
+    .update({ custom_tools: result.data })
+    .eq("id", id)
+    .eq("owner_user_id", user.id)
+    .select("id");
+
+  if (error) return { ok: false, message: error.message };
+  if (!updated || updated.length === 0) {
+    return { ok: false, message: "Widget not found or no longer yours." };
+  }
+
+  revalidatePath(`/widgets/${id}`);
+  revalidatePath("/widgets");
+  return { ok: true };
 }
 
 export async function deleteWidget(id: string) {

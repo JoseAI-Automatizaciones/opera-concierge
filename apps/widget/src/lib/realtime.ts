@@ -1,6 +1,7 @@
 import type { RealtimeSession, TranscriptEntry } from "../types";
-import { dispatchTool, toolDefinitions } from "./tools/registry";
+import { dispatchTool, toolDefinitions, type CustomToolContext } from "./tools/registry";
 import { readPage } from "./tools/dom";
+import type { PublicCustomTool } from "../types";
 
 /**
  * OpenAI Realtime WebRTC client.
@@ -48,7 +49,9 @@ export class MicrophoneDeniedError extends Error {
 
 export async function connectRealtime(
   session: RealtimeSession,
-  events: RealtimeEvents
+  events: RealtimeEvents,
+  customTools: PublicCustomTool[] = [],
+  customToolContext: CustomToolContext | null = null
 ): Promise<RealtimeHandle> {
   events.onStatus("connecting");
 
@@ -100,16 +103,26 @@ export async function connectRealtime(
     const transcripts = new Map<string, TranscriptEntry>();
 
     dc.addEventListener("open", () => {
-      // Register DOM tools so the agent can call them. The new Realtime API
-      // requires `type: "realtime"` on the session payload so the server
-      // discriminates session-config shapes correctly — without it, tools
-      // were silently dropped and the model never emitted function-call
-      // events (model would narrate "Done" without ever invoking a tool).
+      // Compose tool list: built-in DOM tools + operator's custom tools.
+      // Operator-defined tools are rendered as plain Realtime function
+      // schemas using the public-safe (name/description/parameters)
+      // projection — endpoint and auth_header stay server-side.
+      const customToolDefs = customTools.map((t) => ({
+        type: "function" as const,
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters as { type: "object"; properties: Record<string, unknown>; required?: string[] },
+      }));
+
+      // Register DOM tools + custom tools so the agent can call them. The
+      // new Realtime API requires `type: "realtime"` on the session
+      // payload so the server discriminates session-config shapes
+      // correctly.
       const sessionUpdate = {
         type: "session.update",
         session: {
           type: "realtime",
-          tools: toolDefinitions,
+          tools: [...toolDefinitions, ...customToolDefs],
           tool_choice: "auto",
         },
       };
@@ -168,7 +181,7 @@ export async function connectRealtime(
         // eslint-disable-next-line no-console
         console.debug("[opera-concierge] event:", t, msg);
       }
-      handleEvent(msg, transcripts, events, sendEvent);
+      handleEvent(msg, transcripts, events, sendEvent, customToolContext);
     });
 
     const offer = await pc.createOffer();
@@ -239,7 +252,8 @@ function handleEvent(
   msg: unknown,
   transcripts: Map<string, TranscriptEntry>,
   events: RealtimeEvents,
-  sendEvent: (event: Record<string, unknown>) => void
+  sendEvent: (event: Record<string, unknown>) => void,
+  customToolContext: CustomToolContext | null
 ) {
   if (typeof msg !== "object" || msg === null) return;
   const m = msg as Record<string, unknown>;
@@ -306,7 +320,7 @@ function handleEvent(
           result = { ok: false, error: "invalid_tool_arguments" };
         } else {
           try {
-            result = await dispatchTool(name, parsed);
+            result = await dispatchTool(name, parsed, customToolContext);
             if (
               result &&
               typeof result === "object" &&
